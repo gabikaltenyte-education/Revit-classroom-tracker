@@ -216,24 +216,74 @@ function TeacherView({ templates, setView }) {
     const [session, setSession] = useState(null);
     const [students, setStudents] = useState({});
     const [showQR, setShowQR] = useState(false);
+    
     useEffect(() => {
         if (sessionId) {
-            database.ref('sessions/' + sessionId).on('value', (snapshot) => setSession(snapshot.val()));
-            database.ref('sessions/' + sessionId + '/students').on('value', (snapshot) => setStudents(snapshot.val() || {}));
+            console.log('Listening to session:', sessionId);
+            database.ref('sessions/' + sessionId).on('value', (snapshot) => {
+                console.log('Session data received:', snapshot.val());
+                setSession(snapshot.val());
+            });
+            database.ref('sessions/' + sessionId + '/students').on('value', (snapshot) => {
+                console.log('Students data received:', snapshot.val());
+                setStudents(snapshot.val() || {});
+            });
         }
-        return () => { if (sessionId) { database.ref('sessions/' + sessionId).off(); database.ref('sessions/' + sessionId + '/students').off(); } };
+        return () => { 
+            if (sessionId) { 
+                database.ref('sessions/' + sessionId).off(); 
+                database.ref('sessions/' + sessionId + '/students').off(); 
+            } 
+        };
     }, [sessionId]);
-    const startSession = (templateId) => {
-        const template = templates[templateId];
-        const newSessionId = database.ref('sessions').push().key;
-        const sessionData = { templateId, templateName: template.name, steps: template.steps, layout: template.layout, currentStep: 0, enabledSteps: [0], startTime: Date.now(), active: true };
-        database.ref('sessions/' + newSessionId).set(sessionData);
-        setSessionId(newSessionId);
+    
+    const startSession = async (templateId) => {
+        console.log('Starting session with template:', templateId);
+        try {
+            const template = templates[templateId];
+            console.log('Template data:', template);
+            
+            const newSessionId = database.ref('sessions').push().key;
+            console.log('Generated session ID:', newSessionId);
+            
+            const sessionData = { 
+                templateId, 
+                templateName: template.name, 
+                steps: template.steps, 
+                layout: template.layout, 
+                currentStep: 0, 
+                enabledSteps: [0], 
+                startTime: Date.now(), 
+                active: true 
+            };
+            console.log('Session data to write:', sessionData);
+            
+            await database.ref('sessions/' + newSessionId).set(sessionData);
+            console.log('Session written successfully!');
+            
+            setSessionId(newSessionId);
+            console.log('State updated with session ID');
+        } catch (error) {
+            console.error('ERROR starting session:', error);
+            alert('Error starting session: ' + error.message + '\n\nCheck console for details.');
+        }
     };
+    
     const enableNextStep = () => {
         const nextStep = session.currentStep + 1;
-        if (nextStep < session.steps.length) database.ref('sessions/' + sessionId).update({ currentStep: nextStep, enabledSteps: [...session.enabledSteps, nextStep] });
+        if (nextStep < session.steps.length) {
+            database.ref('sessions/' + sessionId).update({ 
+                currentStep: nextStep, 
+                enabledSteps: [...session.enabledSteps, nextStep] 
+            }).then(() => {
+                console.log('Next step enabled:', nextStep);
+            }).catch(error => {
+                console.error('Error enabling next step:', error);
+                alert('Error: ' + error.message);
+            });
+        }
     };
+    
     const endSession = () => {
         if (confirm('End this session? Students will be disconnected.')) {
             database.ref('sessions/' + sessionId).update({ active: false, endTime: Date.now() });
@@ -241,6 +291,7 @@ function TeacherView({ templates, setView }) {
             setSession(null);
         }
     };
+    
     const exportData = () => {
         const studentList = Object.values(students);
         const csv = ['Name,Desk,Steps Completed,Hands Raised'].concat(studentList.map(s => `${s.name},${s.desk},${s.completedSteps?.length || 0},${s.handRaised ? 'Yes' : 'No'}`)).join('\n');
@@ -251,8 +302,11 @@ function TeacherView({ templates, setView }) {
         a.download = `session-${sessionId}-${new Date().toISOString().split('T')[0]}.csv`;
         a.click();
     };
+    
     if (!sessionId) {
         const templateList = Object.entries(templates).map(([id, t]) => ({ id, ...t }));
+        console.log('Available templates:', templateList);
+        
         return (
             <div style={{ padding: '1rem 0' }}>
                 <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem' }}>
@@ -280,10 +334,16 @@ function TeacherView({ templates, setView }) {
             </div>
         );
     }
+    
+    if (!session) {
+        return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading session...</div>;
+    }
+    
     const studentList = Object.values(students);
     const completedCurrent = studentList.filter(s => s.completedSteps?.includes(session.currentStep)).length;
     const handsRaised = studentList.filter(s => s.handRaised);
     const sessionUrl = window.location.origin + window.location.pathname + '?session=' + sessionId;
+    
     return (
         <div style={{ padding: '1rem 0' }}>
             <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1rem 1.25rem', marginBottom: '12px' }}>
