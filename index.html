@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revit Classroom Tracker</title>
+    <style>
+        :root {
+            --color-background-primary: #ffffff;
+            --color-background-secondary: #f8f8f8;
+            --color-background-tertiary: #f0f0f0;
+            --color-background-info: #E6F1FB;
+            --color-background-success: #EAF3DE;
+            --color-background-warning: #FAEEDA;
+            --color-background-danger: #FCEBEB;
+            
+            --color-text-primary: #1a1a1a;
+            --color-text-secondary: #666666;
+            --color-text-tertiary: #999999;
+            --color-text-info: #185FA5;
+            --color-text-success: #3B6D11;
+            --color-text-warning: #854F0B;
+            --color-text-danger: #A32D2D;
+            
+            --color-border-tertiary: rgba(0, 0, 0, 0.15);
+            --color-border-secondary: rgba(0, 0, 0, 0.3);
+            --color-border-info: #85B7EB;
+            --color-border-success: #97C459;
+            --color-border-warning: #FAC775;
+            --color-border-danger: #F09595;
+            
+            --border-radius-md: 8px;
+            --border-radius-lg: 12px;
+            
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --color-background-primary: #1a1a1a;
+                --color-background-secondary: #2a2a2a;
+                --color-background-tertiary: #333333;
+                --color-background-info: #0C447C;
+                --color-background-success: #27500A;
+                --color-background-warning: #633806;
+                --color-background-danger: #791F1F;
+                
+                --color-text-primary: #ffffff;
+                --color-text-secondary: #b3b3b3;
+                --color-text-tertiary: #808080;
+                --color-text-info: #B5D4F4;
+                --color-text-success: #C0DD97;
+                --color-text-warning: #FAC775;
+                --color-text-danger: #F7C1C1;
+                
+                --color-border-tertiary: rgba(255, 255, 255, 0.15);
+                --color-border-secondary: rgba(255, 255, 255, 0.3);
+                --color-border-info: #378ADD;
+                --color-border-success: #639922;
+                --color-border-warning: #BA7517;
+                --color-border-danger: #E24B4A;
+            }
+        }
+        
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: var(--font-sans);
+            background: var(--color-background-tertiary);
+            color: var(--color-text-primary);
+            line-height: 1.7;
+        }
+        
+        #root {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        button {
+            font-family: var(--font-sans);
+            font-size: 14px;
+            padding: 8px 16px;
+            border-radius: var(--border-radius-md);
+            background: var(--color-background-primary);
+            color: var(--color-text-primary);
+            border: 0.5px solid var(--color-border-secondary);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        
+        button:hover {
+            background: var(--color-background-secondary);
+        }
+        
+        button:active {
+            transform: scale(0.98);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        input[type="text"],
+        input[type="number"] {
+            font-family: var(--font-sans);
+            font-size: 14px;
+            padding: 8px 12px;
+            border-radius: var(--border-radius-md);
+            background: var(--color-background-primary);
+            color: var(--color-text-primary);
+            border: 0.5px solid var(--color-border-tertiary);
+            width: 100%;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: var(--color-border-info);
+            box-shadow: 0 0 0 3px rgba(55, 138, 221, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        
+        // Storage adapter for GitHub Pages (uses localStorage instead of window.storage)
+        const storage = {
+            get: (key) => {
+                const data = localStorage.getItem(key);
+                return data ? { value: data } : null;
+            },
+            set: (key, value) => {
+                localStorage.setItem(key, value);
+            }
+        };
+
+        function ClassroomTracker() {
+            const [mode, setMode] = useState(null);
+            const [studentName, setStudentName] = useState('');
+            const [deskNumber, setDeskNumber] = useState('');
+            const [sessionData, setSessionData] = useState(null);
+            const [students, setStudents] = useState({});
+            const [currentStudentDesk, setCurrentStudentDesk] = useState(null);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                loadData();
+                const interval = setInterval(loadData, 1000);
+                return () => clearInterval(interval);
+            }, []);
+
+            const loadData = () => {
+                try {
+                    const session = storage.get('classroom_session');
+                    const studentsData = storage.get('classroom_students');
+                    
+                    if (session) {
+                        setSessionData(JSON.parse(session.value));
+                    } else {
+                        const defaultSession = {
+                            currentStep: 1,
+                            stepName: 'Getting Started',
+                            totalSteps: 5,
+                            deskLayout: { rows: 4, cols: 6 }
+                        };
+                        storage.set('classroom_session', JSON.stringify(defaultSession));
+                        setSessionData(defaultSession);
+                    }
+                    
+                    if (studentsData) {
+                        setStudents(JSON.parse(studentsData.value));
+                    }
+                    
+                    setLoading(false);
+                } catch (error) {
+                    console.error('Error loading data:', error);
+                    setLoading(false);
+                }
+            };
+
+            const joinSession = () => {
+                if (!studentName || !deskNumber) return;
+                
+                const newStudent = {
+                    name: studentName,
+                    desk: parseInt(deskNumber),
+                    completedStep: 0,
+                    handRaised: false,
+                    lastActive: Date.now()
+                };
+                
+                const updatedStudents = { ...students, [deskNumber]: newStudent };
+                storage.set('classroom_students', JSON.stringify(updatedStudents));
+                setStudents(updatedStudents);
+                setCurrentStudentDesk(deskNumber);
+                setMode('student');
+            };
+
+            const markDone = () => {
+                if (!currentStudentDesk || !sessionData) return;
+                
+                const updatedStudents = {
+                    ...students,
+                    [currentStudentDesk]: {
+                        ...students[currentStudentDesk],
+                        completedStep: sessionData.currentStep,
+                        lastActive: Date.now()
+                    }
+                };
+                
+                storage.set('classroom_students', JSON.stringify(updatedStudents));
+                setStudents(updatedStudents);
+            };
+
+            const toggleHand = () => {
+                if (!currentStudentDesk) return;
+                
+                const updatedStudents = {
+                    ...students,
+                    [currentStudentDesk]: {
+                        ...students[currentStudentDesk],
+                        handRaised: !students[currentStudentDesk].handRaised,
+                        lastActive: Date.now()
+                    }
+                };
+                
+                storage.set('classroom_students', JSON.stringify(updatedStudents));
+                setStudents(updatedStudents);
+            };
+
+            const nextStep = () => {
+                const newStepName = prompt('Enter name for next step:');
+                if (!newStepName) return;
+                
+                const updated = {
+                    ...sessionData,
+                    currentStep: sessionData.currentStep + 1,
+                    stepName: newStepName
+                };
+                
+                storage.set('classroom_session', JSON.stringify(updated));
+                setSessionData(updated);
+            };
+
+            const resetSession = () => {
+                if (!confirm('Reset entire session? All student progress will be cleared.')) return;
+                
+                storage.set('classroom_students', JSON.stringify({}));
+                const reset = { ...sessionData, currentStep: 1, stepName: 'Getting Started' };
+                storage.set('classroom_session', JSON.stringify(reset));
+                setStudents({});
+                setSessionData(reset);
+            };
+
+            if (loading) {
+                return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading session...</div>;
+            }
+
+            if (!mode) {
+                return (
+                    <div style={{ padding: '2rem 0' }}>
+                        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                            <h1 style={{ fontSize: '28px', fontWeight: '500', margin: '0 0 8px' }}>Revit Classroom Tracker</h1>
+                            <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>Track student progress in real-time</p>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', maxWidth: '400px', margin: '0 auto' }}>
+                            <button onClick={() => setMode('teacher')} style={{ padding: '1.5rem', fontSize: '16px' }}>
+                                Teacher view
+                            </button>
+                            <button onClick={() => setMode('student-join')} style={{ padding: '1.5rem', fontSize: '16px' }}>
+                                Join as student
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (mode === 'student-join') {
+                return (
+                    <div style={{ padding: '2rem 0' }}>
+                        <div style={{ maxWidth: '400px', margin: '0 auto', background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem' }}>
+                            <h2 style={{ fontSize: '18px', fontWeight: '500', margin: '0 0 1.5rem' }}>Join session</h2>
+                            
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Your name</label>
+                                <input 
+                                    type="text" 
+                                    value={studentName}
+                                    onChange={(e) => setStudentName(e.target.value)}
+                                    placeholder="Enter your name"
+                                />
+                            </div>
+                            
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Desk number</label>
+                                <input 
+                                    type="number" 
+                                    value={deskNumber}
+                                    onChange={(e) => setDeskNumber(e.target.value)}
+                                    placeholder="1-24"
+                                    min="1"
+                                    max="24"
+                                />
+                            </div>
+                            
+                            <button onClick={joinSession} style={{ width: '100%', padding: '12px', fontSize: '15px' }}>
+                                Join session
+                            </button>
+                            
+                            <button onClick={() => setMode(null)} style={{ width: '100%', padding: '12px', fontSize: '14px', marginTop: '8px', background: 'transparent' }}>
+                                Back
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (mode === 'student' && currentStudentDesk) {
+                const student = students[currentStudentDesk];
+                const isDone = student?.completedStep >= sessionData.currentStep;
+                
+                return (
+                    <div style={{ padding: '2rem 0' }}>
+                        <div style={{ maxWidth: '500px', margin: '0 auto' }}>
+                            <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem', marginBottom: '12px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                    <div>
+                                        <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>Desk {currentStudentDesk}</p>
+                                        <p style={{ fontSize: '18px', fontWeight: '500', margin: '4px 0 0' }}>{student?.name}</p>
+                                    </div>
+                                    <div style={{ fontSize: '36px' }}>{student?.handRaised ? '✋' : ''}</div>
+                                </div>
+                                
+                                <div style={{ borderTop: '0.5px solid var(--color-border-tertiary)', paddingTop: '1rem' }}>
+                                    <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Current step</p>
+                                    <p style={{ fontSize: '16px', fontWeight: '500', margin: '0' }}>
+                                        Step {sessionData.currentStep}: {sessionData.stepName}
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                                <button 
+                                    onClick={markDone}
+                                    disabled={isDone}
+                                    style={{ 
+                                        padding: '1.5rem',
+                                        fontSize: '16px',
+                                        background: isDone ? 'var(--color-background-success)' : 'var(--color-background-primary)',
+                                        color: isDone ? 'var(--color-text-success)' : 'var(--color-text-primary)',
+                                        border: isDone ? '0.5px solid var(--color-border-success)' : '0.5px solid var(--color-border-secondary)',
+                                        opacity: isDone ? 0.6 : 1
+                                    }}
+                                >
+                                    {isDone ? '✓ Done' : 'Mark done'}
+                                </button>
+                                
+                                <button 
+                                    onClick={toggleHand}
+                                    style={{ 
+                                        padding: '1.5rem',
+                                        fontSize: '16px',
+                                        background: student?.handRaised ? 'var(--color-background-warning)' : 'var(--color-background-primary)',
+                                        color: student?.handRaised ? 'var(--color-text-warning)' : 'var(--color-text-primary)',
+                                        border: student?.handRaised ? '0.5px solid var(--color-border-warning)' : '0.5px solid var(--color-border-secondary)'
+                                    }}
+                                >
+                                    {student?.handRaised ? '✋ Hand raised' : 'Raise hand'}
+                                </button>
+                            </div>
+                            
+                            <button onClick={() => { setMode(null); setCurrentStudentDesk(null); }} style={{ width: '100%', marginTop: '12px', padding: '12px', fontSize: '14px', background: 'transparent' }}>
+                                Leave session
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (mode === 'teacher') {
+                const { rows, cols } = sessionData.deskLayout;
+                const totalDesks = rows * cols;
+                const studentList = Object.values(students);
+                const completedCount = studentList.filter(s => s.completedStep >= sessionData.currentStep).length;
+                const handsRaised = studentList.filter(s => s.handRaised);
+                
+                return (
+                    <div style={{ padding: '1rem 0' }}>
+                        <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1rem 1.25rem', marginBottom: '12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                <div>
+                                    <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>Current step</p>
+                                    <p style={{ fontSize: '20px', fontWeight: '500', margin: '4px 0 0' }}>
+                                        Step {sessionData.currentStep}: {sessionData.stepName}
+                                    </p>
+                                </div>
+                                <button onClick={nextStep} style={{ padding: '8px 16px', fontSize: '14px' }}>
+                                    Next step →
+                                </button>
+                            </div>
+                            
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                                <div style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '12px' }}>
+                                    <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Students</p>
+                                    <p style={{ fontSize: '24px', fontWeight: '500', margin: '0' }}>{studentList.length}</p>
+                                </div>
+                                <div style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '12px' }}>
+                                    <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Completed</p>
+                                    <p style={{ fontSize: '24px', fontWeight: '500', margin: '0' }}>{completedCount}</p>
+                                </div>
+                                <div style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '12px' }}>
+                                    <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Hands raised</p>
+                                    <p style={{ fontSize: '24px', fontWeight: '500', margin: '0' }}>{handsRaised.length}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1rem' }}>
+                            <div style={{ 
+                                display: 'grid', 
+                                gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                                gap: '8px',
+                                maxWidth: '800px',
+                                margin: '0 auto'
+                            }}>
+                                {Array.from({ length: totalDesks }, (_, i) => {
+                                    const deskNum = i + 1;
+                                    const student = students[deskNum];
+                                    const isDone = student?.completedStep >= sessionData.currentStep;
+                                    
+                                    return (
+                                        <div 
+                                            key={deskNum}
+                                            style={{
+                                                background: student ? (isDone ? 'var(--color-background-success)' : 'var(--color-background-secondary)') : 'var(--color-background-tertiary)',
+                                                border: student?.handRaised ? '2px solid var(--color-border-warning)' : '0.5px solid var(--color-border-tertiary)',
+                                                borderRadius: 'var(--border-radius-md)',
+                                                padding: '12px 8px',
+                                                textAlign: 'center',
+                                                position: 'relative',
+                                                minHeight: '80px',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                justifyContent: 'center'
+                                            }}
+                                        >
+                                            <p style={{ 
+                                                fontSize: '11px', 
+                                                color: 'var(--color-text-secondary)', 
+                                                margin: '0 0 4px',
+                                                fontWeight: '500'
+                                            }}>
+                                                {deskNum}
+                                            </p>
+                                            
+                                            {student ? (
+                                                <>
+                                                    <p style={{ 
+                                                        fontSize: '13px', 
+                                                        fontWeight: '500', 
+                                                        margin: '0',
+                                                        color: isDone ? 'var(--color-text-success)' : 'var(--color-text-primary)',
+                                                        wordBreak: 'break-word'
+                                                    }}>
+                                                        {student.name}
+                                                    </p>
+                                                    {student.handRaised && (
+                                                        <div style={{ fontSize: '20px', margin: '4px 0 0' }}>✋</div>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <p style={{ 
+                                                    fontSize: '12px', 
+                                                    color: 'var(--color-text-tertiary)', 
+                                                    margin: '0'
+                                                }}>
+                                                    Empty
+                                                </p>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                            <button onClick={() => setMode(null)} style={{ flex: 1, padding: '12px', fontSize: '14px', background: 'transparent' }}>
+                                Exit
+                            </button>
+                            <button onClick={resetSession} style={{ flex: 1, padding: '12px', fontSize: '14px', background: 'var(--color-background-danger)', color: 'var(--color-text-danger)', border: '0.5px solid var(--color-border-danger)' }}>
+                                Reset session
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            return null;
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<ClassroomTracker />);
+    </script>
+</body>
+</html>
