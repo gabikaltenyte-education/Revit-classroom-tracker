@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revit Classroom Tracker</title>
+    <style>
+        :root {
+            --color-background-primary: #ffffff;
+            --color-background-secondary: #f8f8f8;
+            --color-background-tertiary: #f0f0f0;
+            --color-background-info: #E6F1FB;
+            --color-background-success: #EAF3DE;
+            --color-background-warning: #FAEEDA;
+            --color-background-danger: #FCEBEB;
+            
+            --color-text-primary: #1a1a1a;
+            --color-text-secondary: #666666;
+            --color-text-tertiary: #999999;
+            --color-text-info: #185FA5;
+            --color-text-success: #3B6D11;
+            --color-text-warning: #854F0B;
+            --color-text-danger: #A32D2D;
+            
+            --color-border-tertiary: rgba(0, 0, 0, 0.15);
+            --color-border-secondary: rgba(0, 0, 0, 0.3);
+            --color-border-info: #85B7EB;
+            --color-border-success: #97C459;
+            --color-border-warning: #FAC775;
+            --color-border-danger: #F09595;
+            
+            --border-radius-md: 8px;
+            --border-radius-lg: 12px;
+            
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --color-background-primary: #1a1a1a;
+                --color-background-secondary: #2a2a2a;
+                --color-background-tertiary: #333333;
+                --color-background-info: #0C447C;
+                --color-background-success: #27500A;
+                --color-background-warning: #633806;
+                --color-background-danger: #791F1F;
+                
+                --color-text-primary: #ffffff;
+                --color-text-secondary: #b3b3b3;
+                --color-text-tertiary: #808080;
+                --color-text-info: #B5D4F4;
+                --color-text-success: #C0DD97;
+                --color-text-warning: #FAC775;
+                --color-text-danger: #F7C1C1;
+                
+                --color-border-tertiary: rgba(255, 255, 255, 0.15);
+                --color-border-secondary: rgba(255, 255, 255, 0.3);
+                --color-border-info: #378ADD;
+                --color-border-success: #639922;
+                --color-border-warning: #BA7517;
+                --color-border-danger: #E24B4A;
+            }
+        }
+        
+        * { box-sizing: border-box; }
+        
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: var(--font-sans);
+            background: var(--color-background-tertiary);
+            color: var(--color-text-primary);
+            line-height: 1.7;
+        }
+        
+        #root { max-width: 1200px; margin: 0 auto; }
+        
+        button {
+            font-family: var(--font-sans);
+            font-size: 14px;
+            padding: 8px 16px;
+            border-radius: var(--border-radius-md);
+            background: var(--color-background-primary);
+            color: var(--color-text-primary);
+            border: 0.5px solid var(--color-border-secondary);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        
+        button:hover { background: var(--color-background-secondary); }
+        button:active { transform: scale(0.98); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        input[type="text"], input[type="number"], textarea, select {
+            font-family: var(--font-sans);
+            font-size: 14px;
+            padding: 8px 12px;
+            border-radius: var(--border-radius-md);
+            background: var(--color-background-primary);
+            color: var(--color-text-primary);
+            border: 0.5px solid var(--color-border-tertiary);
+            width: 100%;
+        }
+        
+        textarea { resize: vertical; min-height: 100px; }
+        
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--color-border-info);
+            box-shadow: 0 0 0 3px rgba(55, 138, 221, 0.1);
+        }
+        
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+        
+        .modal {
+            background: var(--color-background-primary);
+            border-radius: var(--border-radius-lg);
+            padding: 1.5rem;
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script type="text/babel">
+        const firebaseConfig = {
+            apiKey: "AIzaSyAMqKnPGaBxz78G-1UcpRajsXwaKLBop9U",
+            authDomain: "revit-classroom-tracker.firebaseapp.com",
+            databaseURL: "https://revit-classroom-tracker-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "revit-classroom-tracker",
+            storageBucket: "revit-classroom-tracker.firebasestorage.app",
+            messagingSenderId: "721685805575",
+            appId: "1:721685805575:web:8ab164a38c5e5f158fc8a2"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        
+        const { useState, useEffect } = React;
+
+        function App() {
+            const [view, setView] = useState('home');
+            const [templates, setTemplates] = useState({});
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                database.ref('templates').on('value', (snapshot) => {
+                    setTemplates(snapshot.val() || {});
+                    setLoading(false);
+                });
+
+                return () => {
+                    database.ref('templates').off();
+                };
+            }, []);
+
+            if (loading) {
+                return React.createElement('div', { style: { padding: '2rem', textAlign: 'center' } }, 'Loading...');
+            }
+
+            if (view === 'home') {
+                return React.createElement(HomeScreen, { setView });
+            }
+
+            if (view === 'template-manager') {
+                return React.createElement(TemplateManager, { templates, setView });
+            }
+
+            if (view === 'teacher') {
+                return React.createElement(TeacherView, { templates, setView });
+            }
+
+            if (view === 'student') {
+                return React.createElement(StudentView, { setView });
+            }
+
+            return null;
+        }
+
+        function HomeScreen({ setView }) {
+            return React.createElement('div', { style: { padding: '2rem 0' } },
+                React.createElement('div', { style: { textAlign: 'center', marginBottom: '2rem' } },
+                    React.createElement('h1', { style: { fontSize: '28px', fontWeight: '500', margin: '0 0 8px' } }, 'Revit Classroom Tracker'),
+                    React.createElement('p', { style: { fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' } }, 'Professional classroom management system')
+                ),
+                React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', maxWidth: '600px', margin: '0 auto' } },
+                    React.createElement('button', { onClick: () => setView('teacher'), style: { padding: '1.5rem', fontSize: '16px' } }, 'Teacher Dashboard'),
+                    React.createElement('button', { onClick: () => setView('student'), style: { padding: '1.5rem', fontSize: '16px' } }, 'Join as Student'),
+                    React.createElement('button', { onClick: () => setView('template-manager'), style: { padding: '1.5rem', fontSize: '16px' } }, 'Manage Templates')
+                )
+            );
+        }
+
+        function TemplateManager({ templates, setView }) {
+            alert('Template manager loaded successfully! Your Firebase connection is working.');
+            setView('home');
+            return null;
+        }
+
+        function TeacherView({ templates, setView }) {
+            alert('Teacher view loaded! Firebase is connected.');
+            setView('home');
+            return null;
+        }
+
+        function StudentView({ setView }) {
+            alert('Student view loaded! Firebase is connected.');
+            setView('home');
+            return null;
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(App));
+    </script>
+</body>
+</html>
