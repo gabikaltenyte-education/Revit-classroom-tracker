@@ -13,7 +13,6 @@
             --color-background-success: #EAF3DE;
             --color-background-warning: #FAEEDA;
             --color-background-danger: #FCEBEB;
-            
             --color-text-primary: #1a1a1a;
             --color-text-secondary: #666666;
             --color-text-tertiary: #999999;
@@ -21,20 +20,16 @@
             --color-text-success: #3B6D11;
             --color-text-warning: #854F0B;
             --color-text-danger: #A32D2D;
-            
             --color-border-tertiary: rgba(0, 0, 0, 0.15);
             --color-border-secondary: rgba(0, 0, 0, 0.3);
             --color-border-info: #85B7EB;
             --color-border-success: #97C459;
             --color-border-warning: #FAC775;
             --color-border-danger: #F09595;
-            
             --border-radius-md: 8px;
             --border-radius-lg: 12px;
-            
             --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
-        
         @media (prefers-color-scheme: dark) {
             :root {
                 --color-background-primary: #1a1a1a;
@@ -44,7 +39,6 @@
                 --color-background-success: #27500A;
                 --color-background-warning: #633806;
                 --color-background-danger: #791F1F;
-                
                 --color-text-primary: #ffffff;
                 --color-text-secondary: #b3b3b3;
                 --color-text-tertiary: #808080;
@@ -52,7 +46,6 @@
                 --color-text-success: #C0DD97;
                 --color-text-warning: #FAC775;
                 --color-text-danger: #F7C1C1;
-                
                 --color-border-tertiary: rgba(255, 255, 255, 0.15);
                 --color-border-secondary: rgba(255, 255, 255, 0.3);
                 --color-border-info: #378ADD;
@@ -61,179 +54,391 @@
                 --color-border-danger: #E24B4A;
             }
         }
-        
         * { box-sizing: border-box; }
-        
-        body {
-            margin: 0;
-            padding: 20px;
-            font-family: var(--font-sans);
-            background: var(--color-background-tertiary);
-            color: var(--color-text-primary);
-            line-height: 1.7;
-        }
-        
+        body { margin: 0; padding: 20px; font-family: var(--font-sans); background: var(--color-background-tertiary); color: var(--color-text-primary); line-height: 1.7; }
         #root { max-width: 1200px; margin: 0 auto; }
-        
-        button {
-            font-family: var(--font-sans);
-            font-size: 14px;
-            padding: 8px 16px;
-            border-radius: var(--border-radius-md);
-            background: var(--color-background-primary);
-            color: var(--color-text-primary);
-            border: 0.5px solid var(--color-border-secondary);
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-        
+        button { font-family: var(--font-sans); font-size: 14px; padding: 8px 16px; border-radius: var(--border-radius-md); background: var(--color-background-primary); color: var(--color-text-primary); border: 0.5px solid var(--color-border-secondary); cursor: pointer; transition: all 0.15s; }
         button:hover { background: var(--color-background-secondary); }
         button:active { transform: scale(0.98); }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
-        
-        input[type="text"], input[type="number"], textarea, select {
-            font-family: var(--font-sans);
-            font-size: 14px;
-            padding: 8px 12px;
-            border-radius: var(--border-radius-md);
-            background: var(--color-background-primary);
-            color: var(--color-text-primary);
-            border: 0.5px solid var(--color-border-tertiary);
-            width: 100%;
-        }
-        
+        input[type="text"], input[type="number"], textarea { font-family: var(--font-sans); font-size: 14px; padding: 8px 12px; border-radius: var(--border-radius-md); background: var(--color-background-primary); color: var(--color-text-primary); border: 0.5px solid var(--color-border-tertiary); width: 100%; }
         textarea { resize: vertical; min-height: 100px; }
-        
-        input:focus, textarea:focus, select:focus {
-            outline: none;
-            border-color: var(--color-border-info);
-            box-shadow: 0 0 0 3px rgba(55, 138, 221, 0.1);
-        }
-        
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            padding: 20px;
-        }
-        
-        .modal {
-            background: var(--color-background-primary);
-            border-radius: var(--border-radius-lg);
-            padding: 1.5rem;
-            max-width: 600px;
-            width: 100%;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
+        input:focus, textarea:focus { outline: none; border-color: var(--color-border-info); box-shadow: 0 0 0 3px rgba(55, 138, 221, 0.1); }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+        .modal { background: var(--color-background-primary); border-radius: var(--border-radius-lg); padding: 1.5rem; max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; }
     </style>
 </head>
 <body>
     <div id="root"></div>
-    
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
     <script type="text/babel">
-        const firebaseConfig = {
-            apiKey: "AIzaSyAMqKnPGaBxz78G-1UcpRajsXwaKLBop9U",
-            authDomain: "revit-classroom-tracker.firebaseapp.com",
-            databaseURL: "https://revit-classroom-tracker-default-rtdb.europe-west1.firebasedatabase.app",
-            projectId: "revit-classroom-tracker",
-            storageBucket: "revit-classroom-tracker.firebasestorage.app",
-            messagingSenderId: "721685805575",
-            appId: "1:721685805575:web:8ab164a38c5e5f158fc8a2"
-        };
-        
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
-        
-        const { useState, useEffect } = React;
+const firebaseConfig = {
+    apiKey: "AIzaSyAMqKnPGaBxz78G-1UcpRajsXwaKLBop9U",
+    authDomain: "revit-classroom-tracker.firebaseapp.com",
+    databaseURL: "https://revit-classroom-tracker-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "revit-classroom-tracker",
+    storageBucket: "revit-classroom-tracker.firebasestorage.app",
+    messagingSenderId: "721685805575",
+    appId: "1:721685805575:web:8ab164a38c5e5f158fc8a2"
+};
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+const { useState, useEffect } = React;
 
-        function App() {
-            const [view, setView] = useState('home');
-            const [templates, setTemplates] = useState({});
-            const [loading, setLoading] = useState(true);
+function App() {
+    const [view, setView] = useState('home');
+    const [templates, setTemplates] = useState({});
+    const [loading, setLoading] = useState(true);
+    useEffect(() => {
+        database.ref('templates').on('value', (snapshot) => {
+            setTemplates(snapshot.val() || {});
+            setLoading(false);
+        });
+        return () => database.ref('templates').off();
+    }, []);
+    if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>;
+    if (view === 'home') return <HomeScreen setView={setView} />;
+    if (view === 'template-manager') return <TemplateManager templates={templates} setView={setView} />;
+    if (view === 'teacher') return <TeacherView templates={templates} setView={setView} />;
+    if (view === 'student') return <StudentView setView={setView} />;
+    return null;
+}
 
-            useEffect(() => {
-                database.ref('templates').on('value', (snapshot) => {
-                    setTemplates(snapshot.val() || {});
-                    setLoading(false);
-                });
+function HomeScreen({ setView }) {
+    return (
+        <div style={{ padding: '2rem 0' }}>
+            <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                <h1 style={{ fontSize: '28px', fontWeight: '500', margin: '0 0 8px' }}>Revit Classroom Tracker</h1>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>Professional classroom management</p>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', maxWidth: '600px', margin: '0 auto' }}>
+                <button onClick={() => setView('teacher')} style={{ padding: '1.5rem', fontSize: '16px' }}>Teacher Dashboard</button>
+                <button onClick={() => setView('student')} style={{ padding: '1.5rem', fontSize: '16px' }}>Join as Student</button>
+                <button onClick={() => setView('template-manager')} style={{ padding: '1.5rem', fontSize: '16px' }}>Manage Templates</button>
+            </div>
+        </div>
+    );
+}
 
-                return () => {
-                    database.ref('templates').off();
-                };
-            }, []);
+function TemplateManager({ templates, setView }) {
+    const [showModal, setShowModal] = useState(false);
+    const [editingTemplate, setEditingTemplate] = useState(null);
+    const templateList = Object.entries(templates).map(([id, t]) => ({ id, ...t }));
+    return (
+        <div style={{ padding: '1rem 0' }}>
+            <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '0' }}>Lecture Templates</h2>
+                    <button onClick={() => setShowModal(true)}>Create New Template</button>
+                </div>
+                {templateList.length === 0 ? (
+                    <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', textAlign: 'center', padding: '2rem 0' }}>No templates yet. Create your first lecture template!</p>
+                ) : (
+                    <div style={{ display: 'grid', gap: '12px' }}>
+                        {templateList.map(template => (
+                            <div key={template.id} style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <p style={{ fontSize: '16px', fontWeight: '500', margin: '0 0 4px' }}>{template.name}</p>
+                                    <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0' }}>{template.steps.length} steps • {template.layout.rows}×{template.layout.cols} desks</p>
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button onClick={() => { setEditingTemplate(template); setShowModal(true); }}>Edit</button>
+                                    <button onClick={() => { if (confirm('Delete this template?')) database.ref('templates/' + template.id).remove(); }} style={{ background: 'var(--color-background-danger)', color: 'var(--color-text-danger)' }}>Delete</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+            <button onClick={() => setView('home')} style={{ width: '100%' }}>Back to Home</button>
+            {showModal && <TemplateEditor template={editingTemplate} onClose={() => { setShowModal(false); setEditingTemplate(null); }} />}
+        </div>
+    );
+}
 
-            if (loading) {
-                return React.createElement('div', { style: { padding: '2rem', textAlign: 'center' } }, 'Loading...');
-            }
+function TemplateEditor({ template, onClose }) {
+    const [name, setName] = useState(template?.name || '');
+    const [steps, setSteps] = useState(template?.steps || ['']);
+    const [rows, setRows] = useState(template?.layout.rows || 4);
+    const [cols, setCols] = useState(template?.layout.cols || 6);
+    const save = () => {
+        if (!name.trim()) { alert('Please enter a template name'); return; }
+        const filteredSteps = steps.filter(s => s.trim());
+        if (filteredSteps.length === 0) { alert('Please add at least one step'); return; }
+        const templateData = { name: name.trim(), steps: filteredSteps, layout: { rows: parseInt(rows), cols: parseInt(cols) }, created: template?.created || Date.now(), updated: Date.now() };
+        const id = template?.id || database.ref('templates').push().key;
+        database.ref('templates/' + id).set(templateData);
+        onClose();
+    };
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+                <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '0 0 1.5rem' }}>{template ? 'Edit Template' : 'Create Template'}</h2>
+                <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Template Name</label>
+                    <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Revit Basics - Week 1" />
+                </div>
+                <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Classroom Layout</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div><label style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Rows</label><input type="number" min="1" max="10" value={rows} onChange={(e) => setRows(e.target.value)} /></div>
+                        <div><label style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Columns</label><input type="number" min="1" max="10" value={cols} onChange={(e) => setCols(e.target.value)} /></div>
+                    </div>
+                </div>
+                <div style={{ marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <label style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>Steps</label>
+                        <button onClick={() => setSteps([...steps, ''])} style={{ fontSize: '13px', padding: '4px 12px' }}>+ Add Step</button>
+                    </div>
+                    {steps.map((step, i) => (
+                        <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                            <input type="text" value={step} onChange={(e) => { const newSteps = [...steps]; newSteps[i] = e.target.value; setSteps(newSteps); }} placeholder={`Step ${i + 1}: e.g., Create new project`} />
+                            <button onClick={() => setSteps(steps.filter((_, idx) => idx !== i))} style={{ background: 'var(--color-background-danger)', color: 'var(--color-text-danger)', padding: '8px 12px' }}>×</button>
+                        </div>
+                    ))}
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={save} style={{ flex: 1 }}>Save Template</button>
+                    <button onClick={onClose} style={{ flex: 1, background: 'transparent' }}>Cancel</button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
-            if (view === 'home') {
-                return React.createElement(HomeScreen, { setView });
-            }
-
-            if (view === 'template-manager') {
-                return React.createElement(TemplateManager, { templates, setView });
-            }
-
-            if (view === 'teacher') {
-                return React.createElement(TeacherView, { templates, setView });
-            }
-
-            if (view === 'student') {
-                return React.createElement(StudentView, { setView });
-            }
-
-            return null;
+function TeacherView({ templates, setView }) {
+    const [sessionId, setSessionId] = useState(null);
+    const [session, setSession] = useState(null);
+    const [students, setStudents] = useState({});
+    const [showQR, setShowQR] = useState(false);
+    useEffect(() => {
+        if (sessionId) {
+            database.ref('sessions/' + sessionId).on('value', (snapshot) => setSession(snapshot.val()));
+            database.ref('sessions/' + sessionId + '/students').on('value', (snapshot) => setStudents(snapshot.val() || {}));
         }
-
-        function HomeScreen({ setView }) {
-            return React.createElement('div', { style: { padding: '2rem 0' } },
-                React.createElement('div', { style: { textAlign: 'center', marginBottom: '2rem' } },
-                    React.createElement('h1', { style: { fontSize: '28px', fontWeight: '500', margin: '0 0 8px' } }, 'Revit Classroom Tracker'),
-                    React.createElement('p', { style: { fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' } }, 'Professional classroom management system')
-                ),
-                React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', maxWidth: '600px', margin: '0 auto' } },
-                    React.createElement('button', { onClick: () => setView('teacher'), style: { padding: '1.5rem', fontSize: '16px' } }, 'Teacher Dashboard'),
-                    React.createElement('button', { onClick: () => setView('student'), style: { padding: '1.5rem', fontSize: '16px' } }, 'Join as Student'),
-                    React.createElement('button', { onClick: () => setView('template-manager'), style: { padding: '1.5rem', fontSize: '16px' } }, 'Manage Templates')
-                )
-            );
+        return () => { if (sessionId) { database.ref('sessions/' + sessionId).off(); database.ref('sessions/' + sessionId + '/students').off(); } };
+    }, [sessionId]);
+    const startSession = (templateId) => {
+        const template = templates[templateId];
+        const newSessionId = database.ref('sessions').push().key;
+        const sessionData = { templateId, templateName: template.name, steps: template.steps, layout: template.layout, currentStep: 0, enabledSteps: [0], startTime: Date.now(), active: true };
+        database.ref('sessions/' + newSessionId).set(sessionData);
+        setSessionId(newSessionId);
+    };
+    const enableNextStep = () => {
+        const nextStep = session.currentStep + 1;
+        if (nextStep < session.steps.length) database.ref('sessions/' + sessionId).update({ currentStep: nextStep, enabledSteps: [...session.enabledSteps, nextStep] });
+    };
+    const endSession = () => {
+        if (confirm('End this session? Students will be disconnected.')) {
+            database.ref('sessions/' + sessionId).update({ active: false, endTime: Date.now() });
+            setSessionId(null);
+            setSession(null);
         }
+    };
+    const exportData = () => {
+        const studentList = Object.values(students);
+        const csv = ['Name,Desk,Steps Completed,Hands Raised'].concat(studentList.map(s => `${s.name},${s.desk},${s.completedSteps?.length || 0},${s.handRaised ? 'Yes' : 'No'}`)).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `session-${sessionId}-${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+    };
+    if (!sessionId) {
+        const templateList = Object.entries(templates).map(([id, t]) => ({ id, ...t }));
+        return (
+            <div style={{ padding: '1rem 0' }}>
+                <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem' }}>
+                    <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '0 0 1rem' }}>Start a Session</h2>
+                    {templateList.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '2rem 0' }}>
+                            <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>No templates available. Create a template first!</p>
+                            <button onClick={() => setView('template-manager')}>Manage Templates</button>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'grid', gap: '12px' }}>
+                            {templateList.map(template => (
+                                <div key={template.id} style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <p style={{ fontSize: '16px', fontWeight: '500', margin: '0 0 4px' }}>{template.name}</p>
+                                        <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0' }}>{template.steps.length} steps</p>
+                                    </div>
+                                    <button onClick={() => startSession(template.id)}>Start Session</button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <button onClick={() => setView('home')} style={{ width: '100%', marginTop: '12px' }}>Back</button>
+            </div>
+        );
+    }
+    const studentList = Object.values(students);
+    const completedCurrent = studentList.filter(s => s.completedSteps?.includes(session.currentStep)).length;
+    const handsRaised = studentList.filter(s => s.handRaised);
+    const sessionUrl = window.location.origin + window.location.pathname + '?session=' + sessionId;
+    return (
+        <div style={{ padding: '1rem 0' }}>
+            <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1rem 1.25rem', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <div>
+                        <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>{session.templateName}</p>
+                        <p style={{ fontSize: '20px', fontWeight: '500', margin: '4px 0 0' }}>Step {session.currentStep + 1}: {session.steps[session.currentStep]}</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={() => setShowQR(true)}>Share QR</button>
+                        {session.currentStep < session.steps.length - 1 && <button onClick={enableNextStep}>Enable Next Step →</button>}
+                    </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1rem' }}>
+                    <div style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '12px' }}><p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Students</p><p style={{ fontSize: '24px', fontWeight: '500', margin: '0' }}>{studentList.length}</p></div>
+                    <div style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '12px' }}><p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Current Done</p><p style={{ fontSize: '24px', fontWeight: '500', margin: '0' }}>{completedCurrent}</p></div>
+                    <div style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '12px' }}><p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Hands Raised</p><p style={{ fontSize: '24px', fontWeight: '500', margin: '0' }}>{handsRaised.length}</p></div>
+                    <div style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '12px' }}><p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Progress</p><p style={{ fontSize: '24px', fontWeight: '500', margin: '0' }}>{session.currentStep + 1}/{session.steps.length}</p></div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${session.layout.cols}, 1fr)`, gap: '8px' }}>
+                    {Array.from({ length: session.layout.rows * session.layout.cols }, (_, i) => {
+                        const deskNum = i + 1;
+                        const student = students[deskNum];
+                        const isDone = student?.completedSteps?.includes(session.currentStep);
+                        return (
+                            <div key={deskNum} style={{ background: student ? (isDone ? 'var(--color-background-success)' : 'var(--color-background-secondary)') : 'var(--color-background-tertiary)', border: student?.handRaised ? '2px solid var(--color-border-warning)' : '0.5px solid var(--color-border-tertiary)', borderRadius: 'var(--border-radius-md)', padding: '12px 8px', textAlign: 'center', minHeight: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '0 0 4px', fontWeight: '500' }}>{deskNum}</p>
+                                {student ? (<><p style={{ fontSize: '13px', fontWeight: '500', margin: '0', wordBreak: 'break-word' }}>{student.name}</p><p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '2px 0 0' }}>{student.completedSteps?.length || 0}/{session.steps.length}</p>{student.handRaised && <div style={{ fontSize: '20px', margin: '4px 0 0' }}>✋</div>}</>) : (<p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '0' }}>Empty</p>)}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={exportData} style={{ flex: 1 }}>Export Data</button>
+                <button onClick={endSession} style={{ flex: 1, background: 'var(--color-background-danger)', color: 'var(--color-text-danger)' }}>End Session</button>
+            </div>
+            {showQR && <QRModal sessionUrl={sessionUrl} onClose={() => setShowQR(false)} />}
+        </div>
+    );
+}
 
-        function TemplateManager({ templates, setView }) {
-            alert('Template manager loaded successfully! Your Firebase connection is working.');
-            setView('home');
-            return null;
+function QRModal({ sessionUrl, onClose }) {
+    useEffect(() => {
+        const qrDiv = document.getElementById('qrcode');
+        if (qrDiv) {
+            qrDiv.innerHTML = '';
+            new QRCode(qrDiv, { text: sessionUrl, width: 256, height: 256 });
         }
+    }, [sessionUrl]);
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
+                <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '0 0 1rem' }}>Student Join Link</h2>
+                <div id="qrcode" style={{ display: 'inline-block', marginBottom: '1rem' }}></div>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 1rem', wordBreak: 'break-all' }}>{sessionUrl}</p>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => { navigator.clipboard.writeText(sessionUrl); alert('Link copied!'); }} style={{ flex: 1 }}>Copy Link</button>
+                    <button onClick={onClose} style={{ flex: 1 }}>Close</button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
-        function TeacherView({ templates, setView }) {
-            alert('Teacher view loaded! Firebase is connected.');
-            setView('home');
-            return null;
+function StudentView({ setView }) {
+    const [sessionId, setSessionId] = useState(null);
+    const [session, setSession] = useState(null);
+    const [students, setStudents] = useState({});
+    const [myDesk, setMyDesk] = useState(null);
+    const [name, setName] = useState('');
+    const [selectedDesk, setSelectedDesk] = useState(null);
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const sid = urlParams.get('session');
+        if (sid) {
+            setSessionId(sid);
+            database.ref('sessions/' + sid).on('value', (snapshot) => setSession(snapshot.val()));
+            database.ref('sessions/' + sid + '/students').on('value', (snapshot) => setStudents(snapshot.val() || {}));
         }
+        return () => { if (sid) { database.ref('sessions/' + sid).off(); database.ref('sessions/' + sid + '/students').off(); } };
+    }, []);
+    const joinSession = () => {
+        if (!name.trim() || !selectedDesk) { alert('Please enter your name and select a desk'); return; }
+        if (students[selectedDesk]) { alert('This desk is already taken'); return; }
+        const studentData = { name: name.trim(), desk: selectedDesk, currentStep: 0, completedSteps: [], handRaised: false, joinTime: Date.now() };
+        database.ref('sessions/' + sessionId + '/students/' + selectedDesk).set(studentData);
+        setMyDesk(selectedDesk);
+    };
+    const markDone = (stepIndex) => {
+        const student = students[myDesk];
+        if (!student.completedSteps.includes(stepIndex)) database.ref('sessions/' + sessionId + '/students/' + myDesk + '/completedSteps').set([...student.completedSteps, stepIndex]);
+    };
+    const toggleHand = () => {
+        const student = students[myDesk];
+        database.ref('sessions/' + sessionId + '/students/' + myDesk + '/handRaised').set(!student.handRaised);
+    };
+    if (!sessionId || !session) return (<div style={{ padding: '2rem 0', textAlign: 'center' }}><p style={{ fontSize: '16px', color: 'var(--color-text-secondary)' }}>No active session. Please use the link provided by your teacher.</p><button onClick={() => setView('home')} style={{ marginTop: '1rem' }}>Back to Home</button></div>);
+    if (!session.active) return (<div style={{ padding: '2rem 0', textAlign: 'center' }}><p style={{ fontSize: '16px', color: 'var(--color-text-secondary)' }}>This session has ended.</p><button onClick={() => setView('home')} style={{ marginTop: '1rem' }}>Back to Home</button></div>);
+    if (!myDesk) {
+        return (
+            <div style={{ padding: '2rem 0' }}>
+                <div style={{ maxWidth: '600px', margin: '0 auto', background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem' }}>
+                    <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '0 0 8px' }}>Join Session</h2>
+                    <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 1.5rem' }}>{session.templateName}</p>
+                    <div style={{ marginBottom: '1rem' }}><label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Your Name</label><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter your name" /></div>
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Select Your Desk</label>
+                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${session.layout.cols}, 1fr)`, gap: '8px' }}>
+                            {Array.from({ length: session.layout.rows * session.layout.cols }, (_, i) => {
+                                const deskNum = i + 1;
+                                const taken = !!students[deskNum];
+                                const selected = selectedDesk === deskNum;
+                                return (<button key={deskNum} onClick={() => !taken && setSelectedDesk(deskNum)} disabled={taken} style={{ padding: '1rem', background: taken ? 'var(--color-background-tertiary)' : (selected ? 'var(--color-background-info)' : 'var(--color-background-secondary)'), color: selected ? 'var(--color-text-info)' : 'var(--color-text-primary)', border: selected ? '2px solid var(--color-border-info)' : '0.5px solid var(--color-border-tertiary)', cursor: taken ? 'not-allowed' : 'pointer' }}>{deskNum}</button>);
+                            })}
+                        </div>
+                    </div>
+                    <button onClick={joinSession} style={{ width: '100%' }}>Join Session</button>
+                </div>
+            </div>
+        );
+    }
+    const student = students[myDesk];
+    const enabledSteps = session.enabledSteps || [0];
+    return (
+        <div style={{ padding: '2rem 0' }}>
+            <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+                <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <div><p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>Desk {myDesk}</p><p style={{ fontSize: '18px', fontWeight: '500', margin: '4px 0 0' }}>{student.name}</p></div>
+                        <button onClick={toggleHand} style={{ padding: '8px 16px', background: student.handRaised ? 'var(--color-background-warning)' : 'var(--color-background-secondary)', color: student.handRaised ? 'var(--color-text-warning)' : 'var(--color-text-primary)' }}>{student.handRaised ? '✋ Lower Hand' : 'Raise Hand'}</button>
+                    </div>
+                    <div style={{ borderTop: '0.5px solid var(--color-border-tertiary)', paddingTop: '1rem' }}><p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 8px' }}>Progress: {student.completedSteps.length}/{session.steps.length} steps</p></div>
+                </div>
+                <div style={{ display: 'grid', gap: '12px' }}>
+                    {session.steps.map((step, i) => {
+                        const enabled = enabledSteps.includes(i);
+                        const completed = student.completedSteps.includes(i);
+                        return (
+                            <div key={i} style={{ background: completed ? 'var(--color-background-success)' : (enabled ? 'var(--color-background-primary)' : 'var(--color-background-tertiary)'), borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1rem 1.25rem', opacity: enabled ? 1 : 0.5 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div><p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>Step {i + 1}</p><p style={{ fontSize: '16px', fontWeight: '500', margin: '4px 0 0' }}>{step}</p></div>
+                                    {enabled && <button onClick={() => markDone(i)} disabled={completed} style={{ background: completed ? 'var(--color-background-success)' : 'var(--color-background-primary)', color: completed ? 'var(--color-text-success)' : 'var(--color-text-primary)' }}>{completed ? '✓ Done' : 'Mark Done'}</button>}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        </div>
+    );
+}
 
-        function StudentView({ setView }) {
-            alert('Student view loaded! Firebase is connected.');
-            setView('home');
-            return null;
-        }
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(React.createElement(App));
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
     </script>
 </body>
 </html>
