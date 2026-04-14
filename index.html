@@ -6,7 +6,7 @@
     <title>Revit Classroom Tracker</title>
     <style>
         :root {
-            --color-background-primary: #fffffe;
+            --color-background-primary: #ffffff;
             --color-background-secondary: #f8f8f8;
             --color-background-tertiary: #f0f0f0;
             --color-background-info: #E6F1FB;
@@ -94,20 +94,13 @@ function App() {
     const [view, setView] = useState('home');
     const [templates, setTemplates] = useState({});
     const [loading, setLoading] = useState(true);
-    
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const sessionId = urlParams.get('session');
-        if (sessionId) {
-            setView('student');
-        }
+        if (sessionId) { setView('student'); }
     }, []);
-    
     useEffect(() => {
-        database.ref('templates').on('value', (snapshot) => {
-            setTemplates(snapshot.val() || {});
-            setLoading(false);
-        });
+        database.ref('templates').on('value', (snapshot) => { setTemplates(snapshot.val() || {}); setLoading(false); });
         return () => database.ref('templates').off();
     }, []);
     if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>;
@@ -183,7 +176,7 @@ function TemplateEditor({ template, onClose }) {
             const dc = Math.ceil(template.layout.cols / 2);
             for (let r = 0; r < template.layout.rows; r++)
                 for (let c = 0; c < dc; c++)
-                    d.push({ id: id++, x: 10 + c * 112, y: 32 + r * 88 });
+                    d.push({ id: id++, x: c * 120, y: r * 90 });
             return d;
         }
         return [];
@@ -238,7 +231,6 @@ function DeskLayoutEditor({ desks, onChange, gridCols, onGridColsChange, gridRow
     const DESK_W = 108;
     const DESK_H = 76;
     const PAD = 6;
-
     const canvasW = gridCols * CELL_W;
     const canvasH = gridRows * CELL_H;
 
@@ -345,7 +337,6 @@ function TeacherView({ templates, setView }) {
     const [session, setSession] = useState(null);
     const [students, setStudents] = useState({});
     const [showQR, setShowQR] = useState(false);
-    
     useEffect(() => {
         if (sessionId) {
             database.ref('sessions/' + sessionId).on('value', (snapshot) => setSession(snapshot.val()));
@@ -353,7 +344,6 @@ function TeacherView({ templates, setView }) {
         }
         return () => { if (sessionId) { database.ref('sessions/' + sessionId).off(); database.ref('sessions/' + sessionId + '/students').off(); } };
     }, [sessionId]);
-    
     const startSession = async (templateId) => {
         try {
             const template = templates[templateId];
@@ -361,35 +351,26 @@ function TeacherView({ templates, setView }) {
             const sessionData = { templateId, templateName: template.name, steps: template.steps, layout: template.layout, currentStep: 0, enabledSteps: [0], startTime: Date.now(), active: true };
             await database.ref('sessions/' + newSessionId).set(sessionData);
             setSessionId(newSessionId);
-        } catch (error) {
-            alert('Error starting session: ' + error.message);
-        }
+        } catch (error) { alert('Error starting session: ' + error.message); }
     };
-    
     const enableNextStep = () => {
         const nextStep = session.currentStep + 1;
         if (nextStep < session.steps.length) database.ref('sessions/' + sessionId).update({ currentStep: nextStep, enabledSteps: [...session.enabledSteps, nextStep] });
     };
-    
     const endSession = () => {
         if (confirm('End this session? Students will be disconnected.')) {
             database.ref('sessions/' + sessionId).update({ active: false, endTime: Date.now() });
-            setSessionId(null);
-            setSession(null);
+            setSessionId(null); setSession(null);
         }
     };
-    
     const exportData = () => {
         const studentList = Object.values(students);
-        const csv = ['Name,Desk,Steps Completed,Hands Raised'].concat(studentList.map(s => `${s.name},${s.desk},${s.completedSteps?.length || 0},${s.handRaised ? 'Yes' : 'No'}`)).join('\n');
+        const csv = ['Name,Seat,Steps Completed,Hands Raised'].concat(studentList.map(s => `${s.name},${s.desk},${s.completedSteps?.length || 0},${s.handRaised ? 'Yes' : 'No'}`)).join('\n');
         const blob = new Blob([csv], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `session-${sessionId}-${new Date().toISOString().split('T')[0]}.csv`;
-        a.click();
+        const a = document.createElement('a'); a.href = url;
+        a.download = `session-${sessionId}-${new Date().toISOString().split('T')[0]}.csv`; a.click();
     };
-    
     if (!sessionId) {
         const templateList = Object.entries(templates).map(([id, t]) => ({ id, ...t }));
         return (
@@ -419,14 +400,11 @@ function TeacherView({ templates, setView }) {
             </div>
         );
     }
-    
     if (!session) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading session...</div>;
-    
     const studentList = Object.values(students);
     const completedCurrent = studentList.filter(s => s.completedSteps?.includes(session.currentStep)).length;
     const handsRaised = studentList.filter(s => s.handRaised);
     const sessionUrl = window.location.origin + window.location.pathname + '?session=' + sessionId;
-    
     return (
         <div style={{ padding: '1rem 0' }}>
             <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1rem 1.25rem', marginBottom: '12px' }}>
@@ -508,10 +486,7 @@ function TeacherView({ templates, setView }) {
 function QRModal({ sessionUrl, onClose }) {
     useEffect(() => {
         const qrDiv = document.getElementById('qrcode');
-        if (qrDiv) {
-            qrDiv.innerHTML = '';
-            new QRCode(qrDiv, { text: sessionUrl, width: 256, height: 256 });
-        }
+        if (qrDiv) { qrDiv.innerHTML = ''; new QRCode(qrDiv, { text: sessionUrl, width: 256, height: 256 }); }
     }, [sessionUrl]);
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -535,59 +510,42 @@ function StudentView({ setView }) {
     const [myDesk, setMyDesk] = useState(null);
     const [name, setName] = useState('');
     const [selectedDesk, setSelectedDesk] = useState(null);
-    
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const sid = urlParams.get('session');
         if (sid) {
             setSessionId(sid);
             const storedDesk = localStorage.getItem('myDesk_' + sid);
-            if (storedDesk) {
-                setMyDesk(storedDesk);
-            }
+            if (storedDesk) setMyDesk(storedDesk);
             database.ref('sessions/' + sid).on('value', (snapshot) => setSession(snapshot.val()));
             database.ref('sessions/' + sid + '/students').on('value', (snapshot) => setStudents(snapshot.val() || {}));
         }
         return () => { if (sid) { database.ref('sessions/' + sid).off(); database.ref('sessions/' + sid + '/students').off(); } };
     }, []);
-    
     const joinSession = async () => {
-        if (!name.trim() || !selectedDesk) { alert('Please enter your name and select a desk'); return; }
-        if (students[selectedDesk]) { alert('This desk is already taken'); return; }
-        
-        const studentData = { 
-            name: name.trim(), 
-            desk: selectedDesk, 
-            currentStep: 0, 
-            completedSteps: [], 
-            handRaised: false, 
-            joinTime: Date.now() 
-        };
-        
+        if (!name.trim() || !selectedDesk) { alert('Please enter your name and select a seat'); return; }
+        if (students[selectedDesk]) { alert('This seat is already taken'); return; }
+        const studentData = { name: name.trim(), desk: selectedDesk, currentStep: 0, completedSteps: [], handRaised: false, joinTime: Date.now() };
         await database.ref('sessions/' + sessionId + '/students/' + selectedDesk).set(studentData);
         localStorage.setItem('myDesk_' + sessionId, selectedDesk);
         setMyDesk(selectedDesk);
     };
-    
     const markDone = (stepIndex) => {
         const student = students[myDesk];
         if (!student || student.completedSteps.includes(stepIndex)) return;
         database.ref('sessions/' + sessionId + '/students/' + myDesk + '/completedSteps').set([...student.completedSteps, stepIndex]);
     };
-    
     const toggleHand = () => {
         const student = students[myDesk];
         if (!student) return;
         database.ref('sessions/' + sessionId + '/students/' + myDesk + '/handRaised').set(!student.handRaised);
     };
-    
     if (!sessionId || !session) return (<div style={{ padding: '2rem 0', textAlign: 'center' }}><p style={{ fontSize: '16px', color: 'var(--color-text-secondary)' }}>No active session. Please use the link provided by your teacher.</p><button onClick={() => setView('home')} style={{ marginTop: '1rem' }}>Back to Home</button></div>);
     if (!session.active) return (<div style={{ padding: '2rem 0', textAlign: 'center' }}><p style={{ fontSize: '16px', color: 'var(--color-text-secondary)' }}>This session has ended.</p><button onClick={() => setView('home')} style={{ marginTop: '1rem' }}>Back to Home</button></div>);
-    
     if (!myDesk) {
         return (
             <div style={{ padding: '2rem 0' }}>
-                <div style={{ maxWidth: '600px', margin: '0 auto', background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem' }}>
+                <div style={{ maxWidth: '800px', margin: '0 auto', background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem' }}>
                     <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '0 0 8px' }}>Join Session</h2>
                     <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 1.5rem' }}>{session.templateName}</p>
                     <div style={{ marginBottom: '1rem' }}><label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Your Name</label><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter your name" /></div>
@@ -598,36 +556,35 @@ function StudentView({ setView }) {
                             const gCols = session.layout.gridCols || 7;
                             const gRows = session.layout.gridRows || 5;
                             return (
-                            <div>
-                                <div style={{ overflowX: 'auto', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)' }}>
-                                    <div style={{ position: 'relative', width: (gCols * CW) + 'px', height: (gRows * CH) + 'px', background: 'var(--color-background-secondary)', backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`, backgroundSize: `${CW}px ${CH}px`, flexShrink: 0 }}>
-                                        {session.layout.desks.map(desk => (
-                                            <div key={desk.id} style={{ position: 'absolute', left: (desk.x + PAD) + 'px', top: (desk.y + PAD) + 'px', width: DW + 'px' }}>
-                                                <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px', height: (DH - PAD) + 'px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                                    <p style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-secondary)', margin: '0', paddingLeft: '2px' }}>Desk {desk.id}</p>
-                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px' }}>
-                                                        {[desk.id * 2 - 1, desk.id * 2].map(seatNum => {
-                                                            const key = String(seatNum);
-                                                            const taken = !!students[key];
-                                                            const selected = selectedDesk === key;
-                                                            return (
-                                                                <button key={seatNum} onClick={() => !taken && setSelectedDesk(key)} disabled={taken}
-                                                                    style={{ padding: '5px 0', fontSize: '12px', fontWeight: '600', background: taken ? 'var(--color-background-tertiary)' : (selected ? 'var(--color-background-info)' : 'var(--color-background-secondary)'), color: selected ? 'var(--color-text-info)' : (taken ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)'), border: selected ? '2px solid var(--color-border-info)' : '0.5px solid var(--color-border-tertiary)', borderRadius: '4px', cursor: taken ? 'not-allowed' : 'pointer' }}>
-                                                                    {taken ? '×' : seatNum}
-                                                                </button>
-                                                            );
-                                                        })}
+                                <div>
+                                    <div style={{ overflowX: 'auto', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)' }}>
+                                        <div style={{ position: 'relative', width: (gCols * CW) + 'px', height: (gRows * CH) + 'px', background: 'var(--color-background-secondary)', backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`, backgroundSize: `${CW}px ${CH}px`, flexShrink: 0 }}>
+                                            {session.layout.desks.map(desk => (
+                                                <div key={desk.id} style={{ position: 'absolute', left: (desk.x + PAD) + 'px', top: (desk.y + PAD) + 'px', width: DW + 'px' }}>
+                                                    <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px', height: (DH - PAD) + 'px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                                        <p style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-secondary)', margin: '0', paddingLeft: '2px' }}>Desk {desk.id}</p>
+                                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px' }}>
+                                                            {[desk.id * 2 - 1, desk.id * 2].map(seatNum => {
+                                                                const key = String(seatNum);
+                                                                const taken = !!students[key];
+                                                                const selected = selectedDesk === key;
+                                                                return (
+                                                                    <button key={seatNum} onClick={() => !taken && setSelectedDesk(key)} disabled={taken}
+                                                                        style={{ padding: '5px 0', fontSize: '12px', fontWeight: '600', background: taken ? 'var(--color-background-tertiary)' : (selected ? 'var(--color-background-info)' : 'var(--color-background-secondary)'), color: selected ? 'var(--color-text-info)' : (taken ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)'), border: selected ? '2px solid var(--color-border-info)' : '0.5px solid var(--color-border-tertiary)', borderRadius: '4px', cursor: taken ? 'not-allowed' : 'pointer' }}>
+                                                                        {taken ? '×' : seatNum}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
                                     </div>
+                                    <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '5px 0 0' }}>Click your seat number. × means taken.</p>
                                 </div>
-                                <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '5px 0 0' }}>Click your seat number. × means taken.</p>
-                            </div>
                             );
-                        })()
-                        ) : (
+                        })() : (
                             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${session.layout.cols}, 1fr)`, gap: '8px' }}>
                                 {Array.from({ length: session.layout.rows * session.layout.cols }, (_, i) => {
                                     const deskNum = i + 1;
@@ -643,10 +600,8 @@ function StudentView({ setView }) {
             </div>
         );
     }
-    
     const student = students[myDesk];
     if (!student) return <div style={{ padding: '2rem', textAlign: 'center' }}>Connecting...</div>;
-    
     const enabledSteps = session.enabledSteps || [0];
     return (
         <div style={{ padding: '2rem 0' }}>
