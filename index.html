@@ -94,6 +94,15 @@ function App() {
     const [view, setView] = useState('home');
     const [templates, setTemplates] = useState({});
     const [loading, setLoading] = useState(true);
+    
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('session');
+        if (sessionId) {
+            setView('student');
+        }
+    }, []);
+    
     useEffect(() => {
         database.ref('templates').on('value', (snapshot) => {
             setTemplates(snapshot.val() || {});
@@ -368,7 +377,6 @@ function StudentView({ setView }) {
     const [session, setSession] = useState(null);
     const [students, setStudents] = useState({});
     const [myDesk, setMyDesk] = useState(null);
-    const [myData, setMyData] = useState(null);
     const [name, setName] = useState('');
     const [selectedDesk, setSelectedDesk] = useState(null);
     
@@ -377,6 +385,10 @@ function StudentView({ setView }) {
         const sid = urlParams.get('session');
         if (sid) {
             setSessionId(sid);
+            const storedDesk = localStorage.getItem('myDesk_' + sid);
+            if (storedDesk) {
+                setMyDesk(storedDesk);
+            }
             database.ref('sessions/' + sid).on('value', (snapshot) => setSession(snapshot.val()));
             database.ref('sessions/' + sid + '/students').on('value', (snapshot) => setStudents(snapshot.val() || {}));
         }
@@ -396,32 +408,27 @@ function StudentView({ setView }) {
             joinTime: Date.now() 
         };
         
-        setMyData(studentData);
-        setMyDesk(selectedDesk);
-        
         await database.ref('sessions/' + sessionId + '/students/' + selectedDesk).set(studentData);
+        localStorage.setItem('myDesk_' + sessionId, selectedDesk);
+        setMyDesk(selectedDesk);
     };
     
     const markDone = (stepIndex) => {
-        const student = myData || students[myDesk];
+        const student = students[myDesk];
         if (!student || student.completedSteps.includes(stepIndex)) return;
-        const newCompleted = [...student.completedSteps, stepIndex];
-        setMyData({ ...student, completedSteps: newCompleted });
-        database.ref('sessions/' + sessionId + '/students/' + myDesk + '/completedSteps').set(newCompleted);
+        database.ref('sessions/' + sessionId + '/students/' + myDesk + '/completedSteps').set([...student.completedSteps, stepIndex]);
     };
     
     const toggleHand = () => {
-        const student = myData || students[myDesk];
+        const student = students[myDesk];
         if (!student) return;
-        const newHandRaised = !student.handRaised;
-        setMyData({ ...student, handRaised: newHandRaised });
-        database.ref('sessions/' + sessionId + '/students/' + myDesk + '/handRaised').set(newHandRaised);
+        database.ref('sessions/' + sessionId + '/students/' + myDesk + '/handRaised').set(!student.handRaised);
     };
     
     if (!sessionId || !session) return (<div style={{ padding: '2rem 0', textAlign: 'center' }}><p style={{ fontSize: '16px', color: 'var(--color-text-secondary)' }}>No active session. Please use the link provided by your teacher.</p><button onClick={() => setView('home')} style={{ marginTop: '1rem' }}>Back to Home</button></div>);
     if (!session.active) return (<div style={{ padding: '2rem 0', textAlign: 'center' }}><p style={{ fontSize: '16px', color: 'var(--color-text-secondary)' }}>This session has ended.</p><button onClick={() => setView('home')} style={{ marginTop: '1rem' }}>Back to Home</button></div>);
     
-    if (!myDesk || !myData) {
+    if (!myDesk) {
         return (
             <div style={{ padding: '2rem 0' }}>
                 <div style={{ maxWidth: '600px', margin: '0 auto', background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem' }}>
@@ -445,7 +452,9 @@ function StudentView({ setView }) {
         );
     }
     
-    const student = myData;
+    const student = students[myDesk];
+    if (!student) return <div style={{ padding: '2rem', textAlign: 'center' }}>Connecting...</div>;
+    
     const enabledSteps = session.enabledSteps || [0];
     return (
         <div style={{ padding: '2rem 0' }}>
