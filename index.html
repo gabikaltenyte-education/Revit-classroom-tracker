@@ -173,6 +173,8 @@ function TemplateManager({ templates, setView }) {
 function TemplateEditor({ template, onClose }) {
     const [name, setName] = useState(template?.name || '');
     const [steps, setSteps] = useState(template?.steps || ['']);
+    const [gridCols, setGridCols] = useState(template?.layout?.gridCols || 7);
+    const [gridRows, setGridRows] = useState(template?.layout?.gridRows || 5);
     const [desks, setDesks] = useState(() => {
         if (template?.layout?.desks) return template.layout.desks;
         if (template?.layout?.rows) {
@@ -191,7 +193,7 @@ function TemplateEditor({ template, onClose }) {
         const filteredSteps = steps.filter(s => s.trim());
         if (filteredSteps.length === 0) { alert('Please add at least one step'); return; }
         if (desks.length === 0) { alert('Please add at least one desk'); return; }
-        const templateData = { name: name.trim(), steps: filteredSteps, layout: { desks }, created: template?.created || Date.now(), updated: Date.now() };
+        const templateData = { name: name.trim(), steps: filteredSteps, layout: { desks, gridCols, gridRows }, created: template?.created || Date.now(), updated: Date.now() };
         const id = template?.id || database.ref('templates').push().key;
         database.ref('templates/' + id).set(templateData);
         onClose();
@@ -205,7 +207,7 @@ function TemplateEditor({ template, onClose }) {
                     <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Revit Basics - Week 1" />
                 </div>
                 <div style={{ marginBottom: '1rem' }}>
-                    <DeskLayoutEditor desks={desks} onChange={setDesks} />
+                    <DeskLayoutEditor desks={desks} onChange={setDesks} gridCols={gridCols} onGridColsChange={setGridCols} gridRows={gridRows} onGridRowsChange={setGridRows} />
                 </div>
                 <div style={{ marginBottom: '1.5rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
@@ -228,18 +230,33 @@ function TemplateEditor({ template, onClose }) {
     );
 }
 
-function DeskLayoutEditor({ desks, onChange }) {
+function DeskLayoutEditor({ desks, onChange, gridCols, onGridColsChange, gridRows, onGridRowsChange }) {
     const [dragging, setDragging] = useState(null);
     const canvasRef = React.useRef(null);
-    const DESK_W = 92;
-    const DESK_H = 64;
-    const CANVAS_H = 370;
+    const CELL_W = 120;
+    const CELL_H = 90;
+    const DESK_W = 108;
+    const DESK_H = 76;
+    const PAD = 6;
+
+    const canvasW = gridCols * CELL_W;
+    const canvasH = gridRows * CELL_H;
+
+    const snapToCell = (x, y) => ({
+        x: Math.max(0, Math.min(gridCols - 1, Math.round(x / CELL_W))) * CELL_W,
+        y: Math.max(0, Math.min(gridRows - 1, Math.round(y / CELL_H))) * CELL_H
+    });
 
     const addDesk = () => {
-        const ids = desks.map(d => d.id);
-        const newId = ids.length > 0 ? Math.max(...ids) + 1 : 1;
-        const idx = desks.length;
-        onChange([...desks, { id: newId, x: 10 + (idx % 5) * 112, y: 32 + Math.floor(idx / 5) * 90 }]);
+        const occupied = new Set(desks.map(d => `${Math.round(d.x / CELL_W)},${Math.round(d.y / CELL_H)}`));
+        let newX = 0, newY = 0;
+        outer: for (let row = 0; row < gridRows; row++) {
+            for (let col = 0; col < gridCols; col++) {
+                if (!occupied.has(`${col},${row}`)) { newX = col * CELL_W; newY = row * CELL_H; break outer; }
+            }
+        }
+        const newId = desks.length > 0 ? Math.max(...desks.map(d => d.id)) + 1 : 1;
+        onChange([...desks, { id: newId, x: newX, y: newY }]);
     };
 
     const removeDesk = (id) => onChange(desks.filter(d => d.id !== id));
@@ -251,52 +268,74 @@ function DeskLayoutEditor({ desks, onChange }) {
     };
 
     const onMove = (e) => {
-        if (!dragging || !canvasRef.current) return;
-        const cw = canvasRef.current.clientWidth;
-        const newX = Math.max(0, Math.min(cw - DESK_W, dragging.origX + e.clientX - dragging.startX));
-        const newY = Math.max(0, Math.min(CANVAS_H - DESK_H, dragging.origY + e.clientY - dragging.startY));
+        if (!dragging) return;
+        const newX = Math.max(0, Math.min(canvasW - CELL_W, dragging.origX + e.clientX - dragging.startX));
+        const newY = Math.max(0, Math.min(canvasH - CELL_H, dragging.origY + e.clientY - dragging.startY));
         onChange(desks.map(d => d.id === dragging.deskId ? { ...d, x: newX, y: newY } : d));
     };
 
-    const stopDrag = () => setDragging(null);
+    const stopDrag = () => {
+        if (dragging) {
+            const desk = desks.find(d => d.id === dragging.deskId);
+            if (desk) {
+                const snapped = snapToCell(desk.x, desk.y);
+                onChange(desks.map(d => d.id === dragging.deskId ? { ...d, ...snapped } : d));
+            }
+        }
+        setDragging(null);
+    };
 
     return (
         <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px', flexWrap: 'wrap' }}>
                 <label style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>Classroom Layout — {desks.length} desk{desks.length !== 1 ? 's' : ''} · {desks.length * 2} seats</label>
-                <button onClick={addDesk} style={{ fontSize: '13px', padding: '4px 12px' }}>+ Add Desk</button>
-            </div>
-            <div ref={canvasRef}
-                style={{ position: 'relative', width: '100%', height: CANVAS_H + 'px', background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)', overflow: 'hidden', cursor: dragging ? 'grabbing' : 'default', userSelect: 'none' }}
-                onMouseMove={onMove} onMouseUp={stopDrag} onMouseLeave={stopDrag}>
-                <div style={{ position: 'absolute', bottom: '10px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'var(--color-text-tertiary)', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>— BOARD / TEACHER —</div>
-                {desks.length === 0 && (
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                        <p style={{ fontSize: '14px', color: 'var(--color-text-tertiary)', margin: 0 }}>Click "+ Add Desk" to start arranging</p>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        <label style={{ fontSize: '12px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>Cols</label>
+                        <input type="number" min="3" max="14" value={gridCols} onChange={(e) => onGridColsChange(Math.max(3, Math.min(14, parseInt(e.target.value) || 7)))} style={{ width: '50px' }} />
                     </div>
-                )}
-                {desks.map(desk => (
-                    <div key={desk.id}
-                        style={{ position: 'absolute', left: desk.x + 'px', top: desk.y + 'px', width: DESK_W + 'px', cursor: dragging?.deskId === desk.id ? 'grabbing' : 'grab', zIndex: dragging?.deskId === desk.id ? 10 : 1 }}
-                        onMouseDown={(e) => startDrag(e, desk.id)}>
-                        <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                                <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--color-text-secondary)', paddingLeft: '2px' }}>{desk.id}</span>
-                                <button
-                                    onMouseDown={(e) => e.stopPropagation()}
-                                    onClick={(e) => { e.stopPropagation(); removeDesk(desk.id); }}
-                                    style={{ padding: '0 5px', fontSize: '14px', lineHeight: '1.2', background: 'transparent', border: 'none', color: 'var(--color-text-tertiary)', cursor: 'pointer' }}>×</button>
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px' }}>
-                                {['A', 'B'].map(s => (
-                                    <div key={s} style={{ background: 'var(--color-background-tertiary)', borderRadius: '4px', padding: '5px 0', textAlign: 'center', fontSize: '11px', fontWeight: '500', color: 'var(--color-text-secondary)' }}>{s}</div>
-                                ))}
+                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        <label style={{ fontSize: '12px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>Rows</label>
+                        <input type="number" min="2" max="10" value={gridRows} onChange={(e) => onGridRowsChange(Math.max(2, Math.min(10, parseInt(e.target.value) || 5)))} style={{ width: '50px' }} />
+                    </div>
+                    <button onClick={addDesk} style={{ fontSize: '13px', padding: '4px 12px', whiteSpace: 'nowrap' }}>+ Add Desk</button>
+                </div>
+            </div>
+            <div style={{ overflowX: 'auto', overflowY: 'auto', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)' }}>
+                <div ref={canvasRef}
+                    style={{
+                        position: 'relative', width: canvasW + 'px', height: canvasH + 'px',
+                        background: 'var(--color-background-secondary)',
+                        backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`,
+                        backgroundSize: `${CELL_W}px ${CELL_H}px`,
+                        cursor: dragging ? 'grabbing' : 'default', userSelect: 'none', flexShrink: 0
+                    }}
+                    onMouseMove={onMove} onMouseUp={stopDrag} onMouseLeave={stopDrag}>
+                    {desks.length === 0 && (
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                            <p style={{ fontSize: '14px', color: 'var(--color-text-tertiary)', margin: 0 }}>Click "+ Add Desk" to start arranging</p>
+                        </div>
+                    )}
+                    {desks.map(desk => (
+                        <div key={desk.id}
+                            style={{ position: 'absolute', left: (desk.x + PAD) + 'px', top: (desk.y + PAD) + 'px', width: DESK_W + 'px', cursor: dragging?.deskId === desk.id ? 'grabbing' : 'grab', zIndex: dragging?.deskId === desk.id ? 10 : 1 }}
+                            onMouseDown={(e) => startDrag(e, desk.id)}>
+                            <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px', height: (DESK_H - PAD) + 'px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-secondary)', paddingLeft: '2px' }}>Desk {desk.id}</span>
+                                    <button onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); removeDesk(desk.id); }} style={{ padding: '0 4px', fontSize: '13px', lineHeight: '1.2', background: 'transparent', border: 'none', color: 'var(--color-text-tertiary)', cursor: 'pointer' }}>×</button>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px' }}>
+                                    {[desk.id * 2 - 1, desk.id * 2].map(seatNum => (
+                                        <div key={seatNum} style={{ background: 'var(--color-background-tertiary)', borderRadius: '4px', padding: '4px 0', textAlign: 'center', fontSize: '12px', fontWeight: '600', color: 'var(--color-text-secondary)' }}>{seatNum}</div>
+                                    ))}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                ))}
+                    ))}
+                </div>
             </div>
-            <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '5px 0 0' }}>Drag desks to position them. Each desk has 2 seats (A & B).</p>
+            <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '5px 0 0' }}>Drag desks — they snap to grid cells on release. Leave columns empty for aisle gaps.</p>
         </div>
     );
 }
@@ -407,35 +446,41 @@ function TeacherView({ templates, setView }) {
                     <div style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '12px' }}><p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Hands Raised</p><p style={{ fontSize: '24px', fontWeight: '500', margin: '0' }}>{handsRaised.length}</p></div>
                     <div style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '12px' }}><p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Progress</p><p style={{ fontSize: '24px', fontWeight: '500', margin: '0' }}>{session.currentStep + 1}/{session.steps.length}</p></div>
                 </div>
-                {session.layout.desks ? (
-                    <div style={{ position: 'relative', width: '100%', height: '380px', background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', overflow: 'hidden' }}>
-                        <div style={{ position: 'absolute', bottom: '10px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'var(--color-text-tertiary)', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>— BOARD / TEACHER —</div>
-                        {session.layout.desks.map(desk => {
-                            const sA = students[String(desk.id) + 'A'];
-                            const sB = students[String(desk.id) + 'B'];
-                            const doneA = sA?.completedSteps?.includes(session.currentStep);
-                            const doneB = sB?.completedSteps?.includes(session.currentStep);
-                            return (
-                                <div key={desk.id} style={{ position: 'absolute', left: desk.x + 'px', top: desk.y + 'px', width: '92px' }}>
-                                    <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px' }}>
-                                        <p style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-secondary)', margin: '0 0 3px', paddingLeft: '2px' }}>{desk.id}</p>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px' }}>
-                                            {[[sA, doneA, 'A'], [sB, doneB, 'B']].map(([s, done, seat]) => (
-                                                <div key={seat} style={{ background: s ? (done ? 'var(--color-background-success)' : 'var(--color-background-info)') : 'var(--color-background-tertiary)', border: s?.handRaised ? '1.5px solid var(--color-border-warning)' : '0.5px solid var(--color-border-tertiary)', borderRadius: '4px', padding: '3px 2px', textAlign: 'center', minHeight: '50px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                                    {s ? (<>
-                                                        <p style={{ fontSize: '9px', fontWeight: '600', margin: '0', wordBreak: 'break-word', lineHeight: '1.3' }}>{s.name}</p>
-                                                        <p style={{ fontSize: '9px', color: 'var(--color-text-secondary)', margin: '1px 0 0' }}>{s.completedSteps?.length || 0}/{session.steps.length}</p>
-                                                        {s.handRaised && <div style={{ fontSize: '11px', lineHeight: '1' }}>✋</div>}
-                                                    </>) : <p style={{ fontSize: '10px', color: 'var(--color-text-tertiary)', margin: 0 }}>{seat}</p>}
+                {session.layout.desks ? (() => {
+                    const CW = 120, CH = 90, DW = 108, DH = 76, PAD = 6;
+                    const gCols = session.layout.gridCols || 7;
+                    const gRows = session.layout.gridRows || 5;
+                    return (
+                        <div style={{ overflowX: 'auto', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)' }}>
+                            <div style={{ position: 'relative', width: (gCols * CW) + 'px', height: (gRows * CH) + 'px', background: 'var(--color-background-secondary)', backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`, backgroundSize: `${CW}px ${CH}px`, flexShrink: 0 }}>
+                                {session.layout.desks.map(desk => {
+                                    const s1 = students[String(desk.id * 2 - 1)];
+                                    const s2 = students[String(desk.id * 2)];
+                                    const done1 = s1?.completedSteps?.includes(session.currentStep);
+                                    const done2 = s2?.completedSteps?.includes(session.currentStep);
+                                    return (
+                                        <div key={desk.id} style={{ position: 'absolute', left: (desk.x + PAD) + 'px', top: (desk.y + PAD) + 'px', width: DW + 'px' }}>
+                                            <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px', height: (DH - PAD) + 'px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                                <p style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-secondary)', margin: '0', paddingLeft: '2px' }}>Desk {desk.id}</p>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px' }}>
+                                                    {[[s1, done1, desk.id * 2 - 1], [s2, done2, desk.id * 2]].map(([s, done, seatNum]) => (
+                                                        <div key={seatNum} style={{ background: s ? (done ? 'var(--color-background-success)' : 'var(--color-background-info)') : 'var(--color-background-tertiary)', border: s?.handRaised ? '1.5px solid var(--color-border-warning)' : '0.5px solid var(--color-border-tertiary)', borderRadius: '4px', padding: '2px', textAlign: 'center', minHeight: '36px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                                            {s ? (<>
+                                                                <p style={{ fontSize: '9px', fontWeight: '600', margin: '0', wordBreak: 'break-word', lineHeight: '1.2' }}>{s.name}</p>
+                                                                <p style={{ fontSize: '8px', color: 'var(--color-text-secondary)', margin: '1px 0 0' }}>{s.completedSteps?.length || 0}/{session.steps.length}</p>
+                                                                {s.handRaised && <div style={{ fontSize: '10px', lineHeight: '1' }}>✋</div>}
+                                                            </>) : <p style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-tertiary)', margin: 0 }}>{seatNum}</p>}
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                            ))}
+                                            </div>
                                         </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                ) : (
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                })() : (
                     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${session.layout.cols}, 1fr)`, gap: '8px' }}>
                         {Array.from({ length: session.layout.rows * session.layout.cols }, (_, i) => {
                             const deskNum = i + 1;
@@ -509,7 +554,16 @@ function StudentView({ setView }) {
     const joinSession = async () => {
         if (!name.trim() || !selectedDesk) { alert('Please enter your name and select a desk'); return; }
         if (students[selectedDesk]) { alert('This desk is already taken'); return; }
-        const studentData = { name: name.trim(), desk: selectedDesk, currentStep: 0, completedSteps: [], handRaised: false, joinTime: Date.now() };
+        
+        const studentData = { 
+            name: name.trim(), 
+            desk: selectedDesk, 
+            currentStep: 0, 
+            completedSteps: [], 
+            handRaised: false, 
+            joinTime: Date.now() 
+        };
+        
         await database.ref('sessions/' + sessionId + '/students/' + selectedDesk).set(studentData);
         localStorage.setItem('myDesk_' + sessionId, selectedDesk);
         setMyDesk(selectedDesk);
@@ -539,33 +593,40 @@ function StudentView({ setView }) {
                     <div style={{ marginBottom: '1rem' }}><label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Your Name</label><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter your name" /></div>
                     <div style={{ marginBottom: '1.5rem' }}>
                         <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Select Your Seat</label>
-                        {session.layout.desks ? (
+                        {session.layout.desks ? (() => {
+                            const CW = 120, CH = 90, DW = 108, DH = 76, PAD = 6;
+                            const gCols = session.layout.gridCols || 7;
+                            const gRows = session.layout.gridRows || 5;
+                            return (
                             <div>
-                                <div style={{ position: 'relative', width: '100%', height: '300px', background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)', overflow: 'hidden' }}>
-                                    <div style={{ position: 'absolute', bottom: '10px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'var(--color-text-tertiary)', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>— BOARD / TEACHER —</div>
-                                    {session.layout.desks.map(desk => (
-                                        <div key={desk.id} style={{ position: 'absolute', left: desk.x + 'px', top: desk.y + 'px', width: '92px' }}>
-                                            <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px' }}>
-                                                <p style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-secondary)', margin: '0 0 3px', paddingLeft: '2px' }}>{desk.id}</p>
-                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px' }}>
-                                                    {['A', 'B'].map(seat => {
-                                                        const key = String(desk.id) + seat;
-                                                        const taken = !!students[key];
-                                                        const selected = selectedDesk === key;
-                                                        return (
-                                                            <button key={seat} onClick={() => !taken && setSelectedDesk(key)} disabled={taken}
-                                                                style={{ padding: '6px 0', fontSize: '11px', fontWeight: '500', background: taken ? 'var(--color-background-tertiary)' : (selected ? 'var(--color-background-info)' : 'var(--color-background-secondary)'), color: selected ? 'var(--color-text-info)' : (taken ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)'), border: selected ? '2px solid var(--color-border-info)' : '0.5px solid var(--color-border-tertiary)', borderRadius: '4px', cursor: taken ? 'not-allowed' : 'pointer' }}>
-                                                                {taken ? '×' : seat}
-                                                            </button>
-                                                        );
-                                                    })}
+                                <div style={{ overflowX: 'auto', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)' }}>
+                                    <div style={{ position: 'relative', width: (gCols * CW) + 'px', height: (gRows * CH) + 'px', background: 'var(--color-background-secondary)', backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`, backgroundSize: `${CW}px ${CH}px`, flexShrink: 0 }}>
+                                        {session.layout.desks.map(desk => (
+                                            <div key={desk.id} style={{ position: 'absolute', left: (desk.x + PAD) + 'px', top: (desk.y + PAD) + 'px', width: DW + 'px' }}>
+                                                <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px', height: (DH - PAD) + 'px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                                    <p style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-secondary)', margin: '0', paddingLeft: '2px' }}>Desk {desk.id}</p>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px' }}>
+                                                        {[desk.id * 2 - 1, desk.id * 2].map(seatNum => {
+                                                            const key = String(seatNum);
+                                                            const taken = !!students[key];
+                                                            const selected = selectedDesk === key;
+                                                            return (
+                                                                <button key={seatNum} onClick={() => !taken && setSelectedDesk(key)} disabled={taken}
+                                                                    style={{ padding: '5px 0', fontSize: '12px', fontWeight: '600', background: taken ? 'var(--color-background-tertiary)' : (selected ? 'var(--color-background-info)' : 'var(--color-background-secondary)'), color: selected ? 'var(--color-text-info)' : (taken ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)'), border: selected ? '2px solid var(--color-border-info)' : '0.5px solid var(--color-border-tertiary)', borderRadius: '4px', cursor: taken ? 'not-allowed' : 'pointer' }}>
+                                                                    {taken ? '×' : seatNum}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
-                                <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '5px 0 0' }}>Click a seat (A or B) on a desk to select it. × means taken.</p>
+                                <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '5px 0 0' }}>Click your seat number. × means taken.</p>
                             </div>
+                            );
+                        })()
                         ) : (
                             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${session.layout.cols}, 1fr)`, gap: '8px' }}>
                                 {Array.from({ length: session.layout.rows * session.layout.cols }, (_, i) => {
@@ -592,7 +653,7 @@ function StudentView({ setView }) {
             <div style={{ maxWidth: '600px', margin: '0 auto' }}>
                 <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem', marginBottom: '12px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <div><p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>{typeof myDesk === 'string' && /[AB]$/.test(myDesk) ? `Desk ${myDesk.slice(0, -1)}, Seat ${myDesk.slice(-1)}` : `Desk ${myDesk}`}</p><p style={{ fontSize: '18px', fontWeight: '500', margin: '4px 0 0' }}>{student.name}</p></div>
+                        <div><p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>{(() => { const n = Number(myDesk); return !isNaN(n) && n > 0 ? `Desk ${Math.ceil(n / 2)}, Seat ${n}` : `Seat ${myDesk}`; })()}</p><p style={{ fontSize: '18px', fontWeight: '500', margin: '4px 0 0' }}>{student.name}</p></div>
                         <button onClick={toggleHand} style={{ padding: '8px 16px', background: student.handRaised ? 'var(--color-background-warning)' : 'var(--color-background-secondary)', color: student.handRaised ? 'var(--color-text-warning)' : 'var(--color-text-primary)' }}>{student.handRaised ? '✋ Lower Hand' : 'Raise Hand'}</button>
                     </div>
                     <div style={{ borderTop: '0.5px solid var(--color-border-tertiary)', paddingTop: '1rem' }}><p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 8px' }}>Progress: {student.completedSteps.length}/{session.steps.length} steps</p></div>
