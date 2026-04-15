@@ -55,7 +55,7 @@
             }
         }
         * { box-sizing: border-box; }
-        body { margin: 0; padding: 20px; font-family: var(--font-sans); background: var(--color-background-tertiary); color: var(--color-text-primary); line-height: 1.7; }
+        body { margin: 0; padding: 20px; font-family: var(--font-sans); background: var(--color-background-primary); color: var(--color-text-primary); line-height: 1.7; }
         #root { max-width: 1200px; margin: 0 auto; }
         button { font-family: var(--font-sans); font-size: 14px; padding: 8px 16px; border-radius: var(--border-radius-md); background: var(--color-background-primary); color: var(--color-text-primary); border: 0.5px solid var(--color-border-secondary); cursor: pointer; transition: all 0.15s; }
         button:hover { background: var(--color-background-secondary); }
@@ -96,11 +96,10 @@ function App() {
     const [loading, setLoading] = useState(true);
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
-        const sessionId = urlParams.get('session');
-        if (sessionId) { setView('student'); }
+        if (urlParams.get('session')) setView('student');
     }, []);
     useEffect(() => {
-        database.ref('templates').on('value', (snapshot) => { setTemplates(snapshot.val() || {}); setLoading(false); });
+        database.ref('templates').on('value', (snap) => { setTemplates(snap.val() || {}); setLoading(false); });
         return () => database.ref('templates').off();
     }, []);
     if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>;
@@ -142,15 +141,15 @@ function TemplateManager({ templates, setView }) {
                     <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', textAlign: 'center', padding: '2rem 0' }}>No templates yet. Create your first lecture template!</p>
                 ) : (
                     <div style={{ display: 'grid', gap: '12px' }}>
-                        {templateList.map(template => (
-                            <div key={template.id} style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        {templateList.map(t => (
+                            <div key={t.id} style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div>
-                                    <p style={{ fontSize: '16px', fontWeight: '500', margin: '0 0 4px' }}>{template.name}</p>
-                                    <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0' }}>{template.steps.length} steps • {template.layout.desks ? template.layout.desks.length + ' desks' : template.layout.rows + '×' + template.layout.cols}</p>
+                                    <p style={{ fontSize: '16px', fontWeight: '500', margin: '0 0 4px' }}>{t.name}</p>
+                                    <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0' }}>{t.steps.length} steps · {t.layout.desks ? t.layout.desks.length + ' desks' : t.layout.rows + '×' + t.layout.cols}</p>
                                 </div>
                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button onClick={() => { setEditingTemplate(template); setShowModal(true); }}>Edit</button>
-                                    <button onClick={() => { if (confirm('Delete this template?')) database.ref('templates/' + template.id).remove(); }} style={{ background: 'var(--color-background-danger)', color: 'var(--color-text-danger)' }}>Delete</button>
+                                    <button onClick={() => { setEditingTemplate(t); setShowModal(true); }}>Edit</button>
+                                    <button onClick={() => { if (confirm('Delete this template?')) database.ref('templates/' + t.id).remove(); }} style={{ background: 'var(--color-background-danger)', color: 'var(--color-text-danger)' }}>Delete</button>
                                 </div>
                             </div>
                         ))}
@@ -171,8 +170,7 @@ function TemplateEditor({ template, onClose }) {
     const [desks, setDesks] = useState(() => {
         if (template?.layout?.desks) return template.layout.desks;
         if (template?.layout?.rows) {
-            const d = [];
-            let id = 1;
+            const d = []; let id = 1;
             const dc = Math.ceil(template.layout.cols / 2);
             for (let r = 0; r < template.layout.rows; r++)
                 for (let c = 0; c < dc; c++)
@@ -186,18 +184,17 @@ function TemplateEditor({ template, onClose }) {
         const filteredSteps = steps.filter(s => s.trim());
         if (filteredSteps.length === 0) { alert('Please add at least one step'); return; }
         if (desks.length === 0) { alert('Please add at least one desk'); return; }
-        const templateData = { name: name.trim(), steps: filteredSteps, layout: { desks, gridCols, gridRows }, created: template?.created || Date.now(), updated: Date.now() };
         const id = template?.id || database.ref('templates').push().key;
-        database.ref('templates/' + id).set(templateData);
+        database.ref('templates/' + id).set({ name: name.trim(), steps: filteredSteps, layout: { desks, gridCols, gridRows }, created: template?.created || Date.now(), updated: Date.now() });
         onClose();
     };
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '720px' }}>
                 <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '0 0 1.5rem' }}>{template ? 'Edit Template' : 'Create Template'}</h2>
                 <div style={{ marginBottom: '1rem' }}>
                     <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Template Name</label>
-                    <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Revit Basics - Week 1" />
+                    <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Revit Basics - Week 1" />
                 </div>
                 <div style={{ marginBottom: '1rem' }}>
                     <DeskLayoutEditor desks={desks} onChange={setDesks} gridCols={gridCols} onGridColsChange={setGridCols} gridRows={gridRows} onGridRowsChange={setGridRows} />
@@ -209,7 +206,7 @@ function TemplateEditor({ template, onClose }) {
                     </div>
                     {steps.map((step, i) => (
                         <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                            <input type="text" value={step} onChange={(e) => { const newSteps = [...steps]; newSteps[i] = e.target.value; setSteps(newSteps); }} placeholder={`Step ${i + 1}: e.g., Create new project`} />
+                            <input type="text" value={step} onChange={e => { const s = [...steps]; s[i] = e.target.value; setSteps(s); }} placeholder={`Step ${i + 1}`} />
                             <button onClick={() => setSteps(steps.filter((_, idx) => idx !== i))} style={{ background: 'var(--color-background-danger)', color: 'var(--color-text-danger)', padding: '8px 12px' }}>×</button>
                         </div>
                     ))}
@@ -226,53 +223,42 @@ function TemplateEditor({ template, onClose }) {
 function DeskLayoutEditor({ desks, onChange, gridCols, onGridColsChange, gridRows, onGridRowsChange }) {
     const [dragging, setDragging] = useState(null);
     const canvasRef = React.useRef(null);
-    const CELL_W = 120;
-    const CELL_H = 90;
-    const DESK_W = 108;
-    const DESK_H = 76;
-    const PAD = 6;
-    const canvasW = gridCols * CELL_W;
-    const canvasH = gridRows * CELL_H;
+    const CW = 120, CH = 90, DW = 108, DH = 76, PAD = 6;
+    const canvasW = gridCols * CW;
+    const canvasH = gridRows * CH;
 
-    const snapToCell = (x, y) => ({
-        x: Math.max(0, Math.min(gridCols - 1, Math.round(x / CELL_W))) * CELL_W,
-        y: Math.max(0, Math.min(gridRows - 1, Math.round(y / CELL_H))) * CELL_H
+    const snap = (x, y) => ({
+        x: Math.max(0, Math.min(gridCols - 1, Math.round(x / CW))) * CW,
+        y: Math.max(0, Math.min(gridRows - 1, Math.round(y / CH))) * CH
     });
 
     const addDesk = () => {
-        const occupied = new Set(desks.map(d => `${Math.round(d.x / CELL_W)},${Math.round(d.y / CELL_H)}`));
-        let newX = 0, newY = 0;
-        outer: for (let row = 0; row < gridRows; row++) {
-            for (let col = 0; col < gridCols; col++) {
-                if (!occupied.has(`${col},${row}`)) { newX = col * CELL_W; newY = row * CELL_H; break outer; }
-            }
-        }
+        const occ = new Set(desks.map(d => `${Math.round(d.x / CW)},${Math.round(d.y / CH)}`));
+        let nx = 0, ny = 0;
+        outer: for (let r = 0; r < gridRows; r++)
+            for (let c = 0; c < gridCols; c++)
+                if (!occ.has(`${c},${r}`)) { nx = c * CW; ny = r * CH; break outer; }
         const newId = desks.length > 0 ? Math.max(...desks.map(d => d.id)) + 1 : 1;
-        onChange([...desks, { id: newId, x: newX, y: newY }]);
+        onChange([...desks, { id: newId, x: nx, y: ny }]);
     };
-
-    const removeDesk = (id) => onChange(desks.filter(d => d.id !== id));
 
     const startDrag = (e, deskId) => {
         e.preventDefault();
-        const desk = desks.find(d => d.id === deskId);
-        setDragging({ deskId, startX: e.clientX, startY: e.clientY, origX: desk.x, origY: desk.y });
+        const d = desks.find(d => d.id === deskId);
+        setDragging({ deskId, startX: e.clientX, startY: e.clientY, origX: d.x, origY: d.y });
     };
 
     const onMove = (e) => {
         if (!dragging) return;
-        const newX = Math.max(0, Math.min(canvasW - CELL_W, dragging.origX + e.clientX - dragging.startX));
-        const newY = Math.max(0, Math.min(canvasH - CELL_H, dragging.origY + e.clientY - dragging.startY));
-        onChange(desks.map(d => d.id === dragging.deskId ? { ...d, x: newX, y: newY } : d));
+        const nx = Math.max(0, Math.min(canvasW - CW, dragging.origX + e.clientX - dragging.startX));
+        const ny = Math.max(0, Math.min(canvasH - CH, dragging.origY + e.clientY - dragging.startY));
+        onChange(desks.map(d => d.id === dragging.deskId ? { ...d, x: nx, y: ny } : d));
     };
 
     const stopDrag = () => {
         if (dragging) {
-            const desk = desks.find(d => d.id === dragging.deskId);
-            if (desk) {
-                const snapped = snapToCell(desk.x, desk.y);
-                onChange(desks.map(d => d.id === dragging.deskId ? { ...d, ...snapped } : d));
-            }
+            const d = desks.find(d => d.id === dragging.deskId);
+            if (d) onChange(desks.map(d => d.id === dragging.deskId ? { ...d, ...snap(d.x, d.y) } : d));
         }
         setDragging(null);
     };
@@ -282,44 +268,27 @@ function DeskLayoutEditor({ desks, onChange, gridCols, onGridColsChange, gridRow
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px', flexWrap: 'wrap' }}>
                 <label style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>Classroom Layout — {desks.length} desk{desks.length !== 1 ? 's' : ''} · {desks.length * 2} seats</label>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                        <label style={{ fontSize: '12px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>Cols</label>
-                        <input type="number" min="3" max="14" value={gridCols} onChange={(e) => onGridColsChange(Math.max(3, Math.min(14, parseInt(e.target.value) || 7)))} style={{ width: '50px' }} />
-                    </div>
-                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                        <label style={{ fontSize: '12px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>Rows</label>
-                        <input type="number" min="2" max="10" value={gridRows} onChange={(e) => onGridRowsChange(Math.max(2, Math.min(10, parseInt(e.target.value) || 5)))} style={{ width: '50px' }} />
-                    </div>
+                    <label style={{ fontSize: '12px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>Cols</label>
+                    <input type="number" min="3" max="14" value={gridCols} onChange={e => onGridColsChange(Math.max(3, Math.min(14, parseInt(e.target.value) || 7)))} style={{ width: '50px' }} />
+                    <label style={{ fontSize: '12px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>Rows</label>
+                    <input type="number" min="2" max="10" value={gridRows} onChange={e => onGridRowsChange(Math.max(2, Math.min(10, parseInt(e.target.value) || 5)))} style={{ width: '50px' }} />
                     <button onClick={addDesk} style={{ fontSize: '13px', padding: '4px 12px', whiteSpace: 'nowrap' }}>+ Add Desk</button>
                 </div>
             </div>
-            <div style={{ overflowX: 'auto', overflowY: 'auto', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)' }}>
-                <div ref={canvasRef}
-                    style={{
-                        position: 'relative', width: canvasW + 'px', height: canvasH + 'px',
-                        background: 'var(--color-background-secondary)',
-                        backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`,
-                        backgroundSize: `${CELL_W}px ${CELL_H}px`,
-                        cursor: dragging ? 'grabbing' : 'default', userSelect: 'none', flexShrink: 0
-                    }}
+            <div style={{ overflowX: 'auto', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)' }}>
+                <div ref={canvasRef} style={{ position: 'relative', width: canvasW + 'px', height: canvasH + 'px', background: 'var(--color-background-secondary)', backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`, backgroundSize: `${CW}px ${CH}px`, cursor: dragging ? 'grabbing' : 'default', userSelect: 'none', flexShrink: 0 }}
                     onMouseMove={onMove} onMouseUp={stopDrag} onMouseLeave={stopDrag}>
-                    {desks.length === 0 && (
-                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                            <p style={{ fontSize: '14px', color: 'var(--color-text-tertiary)', margin: 0 }}>Click "+ Add Desk" to start arranging</p>
-                        </div>
-                    )}
+                    {desks.length === 0 && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><p style={{ fontSize: '14px', color: 'var(--color-text-tertiary)', margin: 0 }}>Click "+ Add Desk" to start arranging</p></div>}
                     {desks.map(desk => (
-                        <div key={desk.id}
-                            style={{ position: 'absolute', left: (desk.x + PAD) + 'px', top: (desk.y + PAD) + 'px', width: DESK_W + 'px', cursor: dragging?.deskId === desk.id ? 'grabbing' : 'grab', zIndex: dragging?.deskId === desk.id ? 10 : 1 }}
-                            onMouseDown={(e) => startDrag(e, desk.id)}>
-                            <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px', height: (DESK_H - PAD) + 'px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                        <div key={desk.id} style={{ position: 'absolute', left: (desk.x + PAD) + 'px', top: (desk.y + PAD) + 'px', width: DW + 'px', cursor: dragging?.deskId === desk.id ? 'grabbing' : 'grab', zIndex: dragging?.deskId === desk.id ? 10 : 1 }} onMouseDown={e => startDrag(e, desk.id)}>
+                            <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px', height: (DH - PAD) + 'px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-secondary)', paddingLeft: '2px' }}>Desk {desk.id}</span>
-                                    <button onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); removeDesk(desk.id); }} style={{ padding: '0 4px', fontSize: '13px', lineHeight: '1.2', background: 'transparent', border: 'none', color: 'var(--color-text-tertiary)', cursor: 'pointer' }}>×</button>
+                                    <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onChange(desks.filter(d => d.id !== desk.id)); }} style={{ padding: '0 4px', fontSize: '13px', lineHeight: '1.2', background: 'transparent', border: 'none', color: 'var(--color-text-tertiary)', cursor: 'pointer' }}>×</button>
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px' }}>
-                                    {[desk.id * 2 - 1, desk.id * 2].map(seatNum => (
-                                        <div key={seatNum} style={{ background: 'var(--color-background-tertiary)', borderRadius: '4px', padding: '4px 0', textAlign: 'center', fontSize: '12px', fontWeight: '600', color: 'var(--color-text-secondary)' }}>{seatNum}</div>
+                                    {[desk.id * 2 - 1, desk.id * 2].map(n => (
+                                        <div key={n} style={{ background: 'var(--color-background-tertiary)', borderRadius: '4px', padding: '4px 0', textAlign: 'center', fontSize: '12px', fontWeight: '600', color: 'var(--color-text-secondary)' }}>{n}</div>
                                     ))}
                                 </div>
                             </div>
@@ -327,7 +296,7 @@ function DeskLayoutEditor({ desks, onChange, gridCols, onGridColsChange, gridRow
                     ))}
                 </div>
             </div>
-            <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '5px 0 0' }}>Drag desks — they snap to grid cells on release. Leave columns empty for aisle gaps.</p>
+            <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '5px 0 0' }}>Drag desks to arrange. They snap to grid on release. Leave columns empty for aisle gaps.</p>
         </div>
     );
 }
@@ -338,59 +307,56 @@ function TeacherView({ templates, setView }) {
     const [students, setStudents] = useState({});
     const [showQR, setShowQR] = useState(false);
     useEffect(() => {
-        if (sessionId) {
-            database.ref('sessions/' + sessionId).on('value', (snapshot) => setSession(snapshot.val()));
-            database.ref('sessions/' + sessionId + '/students').on('value', (snapshot) => setStudents(snapshot.val() || {}));
-        }
-        return () => { if (sessionId) { database.ref('sessions/' + sessionId).off(); database.ref('sessions/' + sessionId + '/students').off(); } };
+        if (!sessionId) return;
+        database.ref('sessions/' + sessionId).on('value', snap => setSession(snap.val()));
+        database.ref('sessions/' + sessionId + '/students').on('value', snap => setStudents(snap.val() || {}));
+        return () => { database.ref('sessions/' + sessionId).off(); database.ref('sessions/' + sessionId + '/students').off(); };
     }, [sessionId]);
     const startSession = async (templateId) => {
         try {
-            const template = templates[templateId];
-            const newSessionId = database.ref('sessions').push().key;
-            const sessionData = { templateId, templateName: template.name, steps: template.steps, layout: template.layout, currentStep: 0, enabledSteps: [0], startTime: Date.now(), active: true };
-            await database.ref('sessions/' + newSessionId).set(sessionData);
-            setSessionId(newSessionId);
-        } catch (error) { alert('Error starting session: ' + error.message); }
+            const t = templates[templateId];
+            const id = database.ref('sessions').push().key;
+            await database.ref('sessions/' + id).set({ templateId, templateName: t.name, steps: t.steps, layout: t.layout, currentStep: 0, enabledSteps: [0], startTime: Date.now(), active: true });
+            setSessionId(id);
+        } catch (e) { alert('Error: ' + e.message); }
     };
     const enableNextStep = () => {
-        const nextStep = session.currentStep + 1;
-        if (nextStep < session.steps.length) database.ref('sessions/' + sessionId).update({ currentStep: nextStep, enabledSteps: [...session.enabledSteps, nextStep] });
+        const next = session.currentStep + 1;
+        if (next < session.steps.length) database.ref('sessions/' + sessionId).update({ currentStep: next, enabledSteps: [...session.enabledSteps, next] });
     };
     const endSession = () => {
-        if (confirm('End this session? Students will be disconnected.')) {
+        if (confirm('End this session?')) {
             database.ref('sessions/' + sessionId).update({ active: false, endTime: Date.now() });
             setSessionId(null); setSession(null);
         }
     };
     const exportData = () => {
-        const studentList = Object.values(students);
-        const csv = ['Name,Seat,Steps Completed,Hands Raised'].concat(studentList.map(s => `${s.name},${s.desk},${s.completedSteps?.length || 0},${s.handRaised ? 'Yes' : 'No'}`)).join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url;
-        a.download = `session-${sessionId}-${new Date().toISOString().split('T')[0]}.csv`; a.click();
+        const csv = ['Name,Seat,Steps Completed,Hands Raised'].concat(Object.values(students).map(s => `${s.name},${s.desk},${(s.completedSteps || []).length},${s.handRaised ? 'Yes' : 'No'}`)).join('\n');
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+        a.download = `session-${sessionId}.csv`;
+        a.click();
     };
     if (!sessionId) {
-        const templateList = Object.entries(templates).map(([id, t]) => ({ id, ...t }));
+        const list = Object.entries(templates).map(([id, t]) => ({ id, ...t }));
         return (
             <div style={{ padding: '1rem 0' }}>
                 <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem' }}>
                     <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '0 0 1rem' }}>Start a Session</h2>
-                    {templateList.length === 0 ? (
+                    {list.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '2rem 0' }}>
-                            <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>No templates available. Create a template first!</p>
+                            <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>No templates yet. Create one first!</p>
                             <button onClick={() => setView('template-manager')}>Manage Templates</button>
                         </div>
                     ) : (
                         <div style={{ display: 'grid', gap: '12px' }}>
-                            {templateList.map(template => (
-                                <div key={template.id} style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            {list.map(t => (
+                                <div key={t.id} style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div>
-                                        <p style={{ fontSize: '16px', fontWeight: '500', margin: '0 0 4px' }}>{template.name}</p>
-                                        <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0' }}>{template.steps.length} steps</p>
+                                        <p style={{ fontSize: '16px', fontWeight: '500', margin: '0 0 4px' }}>{t.name}</p>
+                                        <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0' }}>{t.steps.length} steps</p>
                                     </div>
-                                    <button onClick={() => startSession(template.id)}>Start Session</button>
+                                    <button onClick={() => startSession(t.id)}>Start Session</button>
                                 </div>
                             ))}
                         </div>
@@ -400,11 +366,10 @@ function TeacherView({ templates, setView }) {
             </div>
         );
     }
-    if (!session) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading session...</div>;
+    if (!session) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>;
     const studentList = Object.values(students);
-    const completedCurrent = studentList.filter(s => s.completedSteps?.includes(session.currentStep)).length;
-    const handsRaised = studentList.filter(s => s.handRaised);
     const sessionUrl = window.location.origin + window.location.pathname + '?session=' + sessionId;
+    const CW = 120, CH = 90, DW = 108, DH = 76, PAD = 6;
     return (
         <div style={{ padding: '1rem 0' }}>
             <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1rem 1.25rem', marginBottom: '12px' }}>
@@ -415,59 +380,55 @@ function TeacherView({ templates, setView }) {
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
                         <button onClick={() => setShowQR(true)}>Share QR</button>
-                        {session.currentStep < session.steps.length - 1 && <button onClick={enableNextStep}>Enable Next Step →</button>}
+                        {session.currentStep < session.steps.length - 1 && <button onClick={enableNextStep}>Next Step →</button>}
                     </div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1rem' }}>
-                    <div style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '12px' }}><p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Students</p><p style={{ fontSize: '24px', fontWeight: '500', margin: '0' }}>{studentList.length}</p></div>
-                    <div style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '12px' }}><p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Current Done</p><p style={{ fontSize: '24px', fontWeight: '500', margin: '0' }}>{completedCurrent}</p></div>
-                    <div style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '12px' }}><p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Hands Raised</p><p style={{ fontSize: '24px', fontWeight: '500', margin: '0' }}>{handsRaised.length}</p></div>
-                    <div style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '12px' }}><p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>Progress</p><p style={{ fontSize: '24px', fontWeight: '500', margin: '0' }}>{session.currentStep + 1}/{session.steps.length}</p></div>
+                    {[['Students', studentList.length], ['Done', studentList.filter(s => (s.completedSteps || []).includes(session.currentStep)).length], ['Hands Up', studentList.filter(s => s.handRaised).length], ['Progress', `${session.currentStep + 1}/${session.steps.length}`]].map(([label, val]) => (
+                        <div key={label} style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '12px' }}>
+                            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>{label}</p>
+                            <p style={{ fontSize: '24px', fontWeight: '500', margin: '0' }}>{val}</p>
+                        </div>
+                    ))}
                 </div>
-                {session.layout.desks ? (() => {
-                    const CW = 120, CH = 90, DW = 108, DH = 76, PAD = 6;
-                    const gCols = session.layout.gridCols || 7;
-                    const gRows = session.layout.gridRows || 5;
-                    return (
-                        <div style={{ overflowX: 'auto', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)' }}>
-                            <div style={{ position: 'relative', width: (gCols * CW) + 'px', height: (gRows * CH) + 'px', background: 'var(--color-background-secondary)', backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`, backgroundSize: `${CW}px ${CH}px`, flexShrink: 0 }}>
-                                {session.layout.desks.map(desk => {
-                                    const s1 = students[String(desk.id * 2 - 1)];
-                                    const s2 = students[String(desk.id * 2)];
-                                    const done1 = s1?.completedSteps?.includes(session.currentStep);
-                                    const done2 = s2?.completedSteps?.includes(session.currentStep);
-                                    return (
-                                        <div key={desk.id} style={{ position: 'absolute', left: (desk.x + PAD) + 'px', top: (desk.y + PAD) + 'px', width: DW + 'px' }}>
-                                            <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px', height: (DH - PAD) + 'px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                                <p style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-secondary)', margin: '0', paddingLeft: '2px' }}>Desk {desk.id}</p>
-                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px' }}>
-                                                    {[[s1, done1, desk.id * 2 - 1], [s2, done2, desk.id * 2]].map(([s, done, seatNum]) => (
+                {session.layout?.desks ? (
+                    <div style={{ overflowX: 'auto', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)' }}>
+                        <div style={{ position: 'relative', width: ((session.layout.gridCols || 7) * CW) + 'px', height: ((session.layout.gridRows || 5) * CH) + 'px', background: 'var(--color-background-secondary)', backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`, backgroundSize: `${CW}px ${CH}px`, flexShrink: 0 }}>
+                            {session.layout.desks.map(desk => {
+                                const s1 = students[String(desk.id * 2 - 1)];
+                                const s2 = students[String(desk.id * 2)];
+                                return (
+                                    <div key={desk.id} style={{ position: 'absolute', left: (desk.x + PAD) + 'px', top: (desk.y + PAD) + 'px', width: DW + 'px' }}>
+                                        <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px', height: (DH - PAD) + 'px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                            <p style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-secondary)', margin: '0', paddingLeft: '2px' }}>Desk {desk.id}</p>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px' }}>
+                                                {[[s1, desk.id * 2 - 1], [s2, desk.id * 2]].map(([s, seatNum]) => {
+                                                    const done = (s?.completedSteps || []).includes(session.currentStep);
+                                                    return (
                                                         <div key={seatNum} style={{ background: s ? (done ? 'var(--color-background-success)' : 'var(--color-background-info)') : 'var(--color-background-tertiary)', border: s?.handRaised ? '1.5px solid var(--color-border-warning)' : '0.5px solid var(--color-border-tertiary)', borderRadius: '4px', padding: '2px', textAlign: 'center', minHeight: '36px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                                                             {s ? (<>
                                                                 <p style={{ fontSize: '9px', fontWeight: '600', margin: '0', wordBreak: 'break-word', lineHeight: '1.2' }}>{s.name}</p>
-                                                                <p style={{ fontSize: '8px', color: 'var(--color-text-secondary)', margin: '1px 0 0' }}>{s.completedSteps?.length || 0}/{session.steps.length}</p>
-                                                                {s.handRaised && <div style={{ fontSize: '10px', lineHeight: '1' }}>✋</div>}
+                                                                <p style={{ fontSize: '8px', color: 'var(--color-text-secondary)', margin: '1px 0 0' }}>{(s.completedSteps || []).length}/{session.steps.length}</p>
+                                                                {s.handRaised && <div style={{ fontSize: '10px' }}>✋</div>}
                                                             </>) : <p style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-tertiary)', margin: 0 }}>{seatNum}</p>}
                                                         </div>
-                                                    ))}
-                                                </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
-                                    );
-                                })}
-                            </div>
+                                    </div>
+                                );
+                            })}
                         </div>
-                    );
-                })() : (
-                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${session.layout.cols}, 1fr)`, gap: '8px' }}>
-                        {Array.from({ length: session.layout.rows * session.layout.cols }, (_, i) => {
-                            const deskNum = i + 1;
-                            const student = students[deskNum];
-                            const isDone = student?.completedSteps?.includes(session.currentStep);
+                    </div>
+                ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${session.layout?.cols || 4}, 1fr)`, gap: '8px' }}>
+                        {Array.from({ length: (session.layout?.rows || 1) * (session.layout?.cols || 4) }, (_, i) => {
+                            const n = i + 1; const s = students[n]; const done = (s?.completedSteps || []).includes(session.currentStep);
                             return (
-                                <div key={deskNum} style={{ background: student ? (isDone ? 'var(--color-background-success)' : 'var(--color-background-secondary)') : 'var(--color-background-tertiary)', border: student?.handRaised ? '2px solid var(--color-border-warning)' : '0.5px solid var(--color-border-tertiary)', borderRadius: 'var(--border-radius-md)', padding: '12px 8px', textAlign: 'center', minHeight: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                    <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '0 0 4px', fontWeight: '500' }}>{deskNum}</p>
-                                    {student ? (<><p style={{ fontSize: '13px', fontWeight: '500', margin: '0', wordBreak: 'break-word' }}>{student.name}</p><p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '2px 0 0' }}>{student.completedSteps?.length || 0}/{session.steps.length}</p>{student.handRaised && <div style={{ fontSize: '20px', margin: '4px 0 0' }}>✋</div>}</>) : (<p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '0' }}>Empty</p>)}
+                                <div key={n} style={{ background: s ? (done ? 'var(--color-background-success)' : 'var(--color-background-secondary)') : 'var(--color-background-tertiary)', border: s?.handRaised ? '2px solid var(--color-border-warning)' : '0.5px solid var(--color-border-tertiary)', borderRadius: 'var(--border-radius-md)', padding: '12px 8px', textAlign: 'center', minHeight: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                    <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '0 0 4px', fontWeight: '500' }}>{n}</p>
+                                    {s ? (<><p style={{ fontSize: '13px', fontWeight: '500', margin: '0', wordBreak: 'break-word' }}>{s.name}</p><p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '2px 0 0' }}>{(s.completedSteps || []).length}/{session.steps.length}</p>{s.handRaised && <div style={{ fontSize: '20px' }}>✋</div>}</>) : <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '0' }}>Empty</p>}
                                 </div>
                             );
                         })}
@@ -485,17 +446,17 @@ function TeacherView({ templates, setView }) {
 
 function QRModal({ sessionUrl, onClose }) {
     useEffect(() => {
-        const qrDiv = document.getElementById('qrcode');
-        if (qrDiv) { qrDiv.innerHTML = ''; new QRCode(qrDiv, { text: sessionUrl, width: 256, height: 256 }); }
+        const el = document.getElementById('qrcode');
+        if (el) { el.innerHTML = ''; new QRCode(el, { text: sessionUrl, width: 256, height: 256 }); }
     }, [sessionUrl]);
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
                 <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '0 0 1rem' }}>Student Join Link</h2>
                 <div id="qrcode" style={{ display: 'inline-block', marginBottom: '1rem' }}></div>
                 <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 1rem', wordBreak: 'break-all' }}>{sessionUrl}</p>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => { navigator.clipboard.writeText(sessionUrl); alert('Link copied!'); }} style={{ flex: 1 }}>Copy Link</button>
+                    <button onClick={() => { navigator.clipboard.writeText(sessionUrl); alert('Copied!'); }} style={{ flex: 1 }}>Copy Link</button>
                     <button onClick={onClose} style={{ flex: 1 }}>Close</button>
                 </div>
             </div>
@@ -511,86 +472,82 @@ function StudentView({ setView }) {
     const [name, setName] = useState('');
     const [selectedDesk, setSelectedDesk] = useState(null);
     useEffect(() => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const sid = urlParams.get('session');
-        if (sid) {
-            setSessionId(sid);
-            const storedDesk = localStorage.getItem('myDesk_' + sid);
-            if (storedDesk) setMyDesk(storedDesk);
-            database.ref('sessions/' + sid).on('value', (snapshot) => setSession(snapshot.val()));
-            database.ref('sessions/' + sid + '/students').on('value', (snapshot) => setStudents(snapshot.val() || {}));
-        }
-        return () => { if (sid) { database.ref('sessions/' + sid).off(); database.ref('sessions/' + sid + '/students').off(); } };
+        const sid = new URLSearchParams(window.location.search).get('session');
+        if (!sid) return;
+        setSessionId(sid);
+        const stored = localStorage.getItem('myDesk_' + sid);
+        if (stored) setMyDesk(stored);
+        database.ref('sessions/' + sid).on('value', snap => setSession(snap.val()));
+        database.ref('sessions/' + sid + '/students').on('value', snap => setStudents(snap.val() || {}));
+        return () => { database.ref('sessions/' + sid).off(); database.ref('sessions/' + sid + '/students').off(); };
     }, []);
     const joinSession = async () => {
-        if (!name.trim() || !selectedDesk) { alert('Please enter your name and select a seat'); return; }
-        if (students[selectedDesk]) { alert('This seat is already taken'); return; }
-        const studentData = { name: name.trim(), desk: selectedDesk, currentStep: 0, completedSteps: [], handRaised: false, joinTime: Date.now() };
-        await database.ref('sessions/' + sessionId + '/students/' + selectedDesk).set(studentData);
+        if (!name.trim() || !selectedDesk) { alert('Enter your name and select a seat'); return; }
+        if (students[selectedDesk]) { alert('Seat already taken'); return; }
+        await database.ref('sessions/' + sessionId + '/students/' + selectedDesk).set({ name: name.trim(), desk: selectedDesk, currentStep: 0, completedSteps: [], handRaised: false, joinTime: Date.now() });
         localStorage.setItem('myDesk_' + sessionId, selectedDesk);
         setMyDesk(selectedDesk);
     };
-    const markDone = (stepIndex) => {
-        const student = students[myDesk];
-        if (!student || student.completedSteps.includes(stepIndex)) return;
-        database.ref('sessions/' + sessionId + '/students/' + myDesk + '/completedSteps').set([...student.completedSteps, stepIndex]);
+    const markDone = (i) => {
+        const s = students[myDesk];
+        if (!s) return;
+        const steps = s.completedSteps || [];
+        if (steps.includes(i)) return;
+        database.ref('sessions/' + sessionId + '/students/' + myDesk + '/completedSteps').set([...steps, i]);
     };
     const toggleHand = () => {
-        const student = students[myDesk];
-        if (!student) return;
-        database.ref('sessions/' + sessionId + '/students/' + myDesk + '/handRaised').set(!student.handRaised);
+        const s = students[myDesk];
+        if (!s) return;
+        database.ref('sessions/' + sessionId + '/students/' + myDesk + '/handRaised').set(!s.handRaised);
     };
-    if (!sessionId || !session) return (<div style={{ padding: '2rem 0', textAlign: 'center' }}><p style={{ fontSize: '16px', color: 'var(--color-text-secondary)' }}>No active session. Please use the link provided by your teacher.</p><button onClick={() => setView('home')} style={{ marginTop: '1rem' }}>Back to Home</button></div>);
-    if (!session.active) return (<div style={{ padding: '2rem 0', textAlign: 'center' }}><p style={{ fontSize: '16px', color: 'var(--color-text-secondary)' }}>This session has ended.</p><button onClick={() => setView('home')} style={{ marginTop: '1rem' }}>Back to Home</button></div>);
+    if (!sessionId || !session) return <div style={{ padding: '2rem 0', textAlign: 'center' }}><p style={{ color: 'var(--color-text-secondary)' }}>No active session. Use the link from your teacher.</p><button onClick={() => setView('home')} style={{ marginTop: '1rem' }}>Back</button></div>;
+    if (!session.active) return <div style={{ padding: '2rem 0', textAlign: 'center' }}><p style={{ color: 'var(--color-text-secondary)' }}>Session ended.</p><button onClick={() => setView('home')} style={{ marginTop: '1rem' }}>Back</button></div>;
     if (!myDesk) {
+        const CW = 120, CH = 90, DW = 108, DH = 76, PAD = 6;
         return (
             <div style={{ padding: '2rem 0' }}>
-                <div style={{ maxWidth: '800px', margin: '0 auto', background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem' }}>
+                <div style={{ maxWidth: '640px', margin: '0 auto', background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem' }}>
                     <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '0 0 8px' }}>Join Session</h2>
                     <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 1.5rem' }}>{session.templateName}</p>
-                    <div style={{ marginBottom: '1rem' }}><label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Your Name</label><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter your name" /></div>
+                    <div style={{ marginBottom: '1rem' }}>
+                        <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Your Name</label>
+                        <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Enter your name" />
+                    </div>
                     <div style={{ marginBottom: '1.5rem' }}>
                         <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Select Your Seat</label>
-                        {session.layout.desks ? (() => {
-                            const CW = 120, CH = 90, DW = 108, DH = 76, PAD = 6;
-                            const gCols = session.layout.gridCols || 7;
-                            const gRows = session.layout.gridRows || 5;
-                            return (
-                                <div>
-                                    <div style={{ overflowX: 'auto', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)' }}>
-                                        <div style={{ position: 'relative', width: (gCols * CW) + 'px', height: (gRows * CH) + 'px', background: 'var(--color-background-secondary)', backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`, backgroundSize: `${CW}px ${CH}px`, flexShrink: 0 }}>
-                                            {session.layout.desks.map(desk => (
-                                                <div key={desk.id} style={{ position: 'absolute', left: (desk.x + PAD) + 'px', top: (desk.y + PAD) + 'px', width: DW + 'px' }}>
-                                                    <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px', height: (DH - PAD) + 'px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                                        <p style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-secondary)', margin: '0', paddingLeft: '2px' }}>Desk {desk.id}</p>
-                                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px' }}>
-                                                            {[desk.id * 2 - 1, desk.id * 2].map(seatNum => {
-                                                                const key = String(seatNum);
-                                                                const taken = !!students[key];
-                                                                const selected = selectedDesk === key;
-                                                                return (
-                                                                    <button key={seatNum} onClick={() => !taken && setSelectedDesk(key)} disabled={taken}
-                                                                        style={{ padding: '5px 0', fontSize: '12px', fontWeight: '600', background: taken ? 'var(--color-background-tertiary)' : (selected ? 'var(--color-background-info)' : 'var(--color-background-secondary)'), color: selected ? 'var(--color-text-info)' : (taken ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)'), border: selected ? '2px solid var(--color-border-info)' : '0.5px solid var(--color-border-tertiary)', borderRadius: '4px', cursor: taken ? 'not-allowed' : 'pointer' }}>
-                                                                        {taken ? '×' : seatNum}
-                                                                    </button>
-                                                                );
-                                                            })}
-                                                        </div>
+                        {session.layout?.desks ? (
+                            <div>
+                                <div style={{ overflowX: 'auto', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)' }}>
+                                    <div style={{ position: 'relative', width: ((session.layout.gridCols || 7) * CW) + 'px', height: ((session.layout.gridRows || 5) * CH) + 'px', background: 'var(--color-background-secondary)', backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`, backgroundSize: `${CW}px ${CH}px`, flexShrink: 0 }}>
+                                        {session.layout.desks.map(desk => (
+                                            <div key={desk.id} style={{ position: 'absolute', left: (desk.x + PAD) + 'px', top: (desk.y + PAD) + 'px', width: DW + 'px' }}>
+                                                <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px', height: (DH - PAD) + 'px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                                    <p style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-secondary)', margin: '0', paddingLeft: '2px' }}>Desk {desk.id}</p>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px' }}>
+                                                        {[desk.id * 2 - 1, desk.id * 2].map(n => {
+                                                            const key = String(n);
+                                                            const taken = !!students[key];
+                                                            const sel = selectedDesk === key;
+                                                            return (
+                                                                <button key={n} onClick={() => !taken && setSelectedDesk(key)} disabled={taken}
+                                                                    style={{ padding: '5px 0', fontSize: '12px', fontWeight: '600', background: taken ? 'var(--color-background-tertiary)' : (sel ? 'var(--color-background-info)' : 'var(--color-background-secondary)'), color: sel ? 'var(--color-text-info)' : (taken ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)'), border: sel ? '2px solid var(--color-border-info)' : '0.5px solid var(--color-border-tertiary)', borderRadius: '4px', cursor: taken ? 'not-allowed' : 'pointer' }}>
+                                                                    {taken ? '×' : n}
+                                                                </button>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
-                                            ))}
-                                        </div>
+                                            </div>
+                                        ))}
                                     </div>
-                                    <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '5px 0 0' }}>Click your seat number. × means taken.</p>
                                 </div>
-                            );
-                        })() : (
-                            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${session.layout.cols}, 1fr)`, gap: '8px' }}>
-                                {Array.from({ length: session.layout.rows * session.layout.cols }, (_, i) => {
-                                    const deskNum = i + 1;
-                                    const taken = !!students[deskNum];
-                                    const selected = selectedDesk === deskNum;
-                                    return (<button key={deskNum} onClick={() => !taken && setSelectedDesk(deskNum)} disabled={taken} style={{ padding: '1rem', background: taken ? 'var(--color-background-tertiary)' : (selected ? 'var(--color-background-info)' : 'var(--color-background-secondary)'), color: selected ? 'var(--color-text-info)' : 'var(--color-text-primary)', border: selected ? '2px solid var(--color-border-info)' : '0.5px solid var(--color-border-tertiary)', cursor: taken ? 'not-allowed' : 'pointer' }}>{deskNum}</button>);
+                                <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '5px 0 0' }}>Click your seat number. × means taken.</p>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${session.layout?.cols || 4}, 1fr)`, gap: '8px' }}>
+                                {Array.from({ length: (session.layout?.rows || 1) * (session.layout?.cols || 4) }, (_, i) => {
+                                    const n = i + 1; const taken = !!students[n]; const sel = selectedDesk === n;
+                                    return <button key={n} onClick={() => !taken && setSelectedDesk(n)} disabled={taken} style={{ padding: '1rem', background: taken ? 'var(--color-background-tertiary)' : (sel ? 'var(--color-background-info)' : 'var(--color-background-secondary)'), color: sel ? 'var(--color-text-info)' : 'var(--color-text-primary)', border: sel ? '2px solid var(--color-border-info)' : '0.5px solid var(--color-border-tertiary)', cursor: taken ? 'not-allowed' : 'pointer' }}>{n}</button>;
                                 })}
                             </div>
                         )}
@@ -602,25 +559,34 @@ function StudentView({ setView }) {
     }
     const student = students[myDesk];
     if (!student) return <div style={{ padding: '2rem', textAlign: 'center' }}>Connecting...</div>;
+    const completedSteps = student.completedSteps || [];
     const enabledSteps = session.enabledSteps || [0];
     return (
         <div style={{ padding: '2rem 0' }}>
             <div style={{ maxWidth: '600px', margin: '0 auto' }}>
                 <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem', marginBottom: '12px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <div><p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>{(() => { const n = Number(myDesk); return !isNaN(n) && n > 0 ? `Desk ${Math.ceil(n / 2)}, Seat ${n}` : `Seat ${myDesk}`; })()}</p><p style={{ fontSize: '18px', fontWeight: '500', margin: '4px 0 0' }}>{student.name}</p></div>
-                        <button onClick={toggleHand} style={{ padding: '8px 16px', background: student.handRaised ? 'var(--color-background-warning)' : 'var(--color-background-secondary)', color: student.handRaised ? 'var(--color-text-warning)' : 'var(--color-text-primary)' }}>{student.handRaised ? '✋ Lower Hand' : 'Raise Hand'}</button>
+                        <div>
+                            <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>{(() => { const n = Number(myDesk); return !isNaN(n) && n > 0 ? `Desk ${Math.ceil(n / 2)}, Seat ${n}` : `Seat ${myDesk}`; })()}</p>
+                            <p style={{ fontSize: '18px', fontWeight: '500', margin: '4px 0 0' }}>{student.name}</p>
+                        </div>
+                        <button onClick={toggleHand} style={{ background: student.handRaised ? 'var(--color-background-warning)' : 'var(--color-background-secondary)', color: student.handRaised ? 'var(--color-text-warning)' : 'var(--color-text-primary)' }}>{student.handRaised ? '✋ Lower Hand' : 'Raise Hand'}</button>
                     </div>
-                    <div style={{ borderTop: '0.5px solid var(--color-border-tertiary)', paddingTop: '1rem' }}><p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 8px' }}>Progress: {student.completedSteps.length}/{session.steps.length} steps</p></div>
+                    <div style={{ borderTop: '0.5px solid var(--color-border-tertiary)', paddingTop: '1rem' }}>
+                        <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>Progress: {completedSteps.length}/{session.steps.length} steps</p>
+                    </div>
                 </div>
                 <div style={{ display: 'grid', gap: '12px' }}>
                     {session.steps.map((step, i) => {
                         const enabled = enabledSteps.includes(i);
-                        const completed = student.completedSteps.includes(i);
+                        const completed = completedSteps.includes(i);
                         return (
                             <div key={i} style={{ background: completed ? 'var(--color-background-success)' : (enabled ? 'var(--color-background-primary)' : 'var(--color-background-tertiary)'), borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1rem 1.25rem', opacity: enabled ? 1 : 0.5 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div><p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>Step {i + 1}</p><p style={{ fontSize: '16px', fontWeight: '500', margin: '4px 0 0' }}>{step}</p></div>
+                                    <div>
+                                        <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>Step {i + 1}</p>
+                                        <p style={{ fontSize: '16px', fontWeight: '500', margin: '4px 0 0' }}>{step}</p>
+                                    </div>
                                     {enabled && <button onClick={() => markDone(i)} disabled={completed} style={{ background: completed ? 'var(--color-background-success)' : 'var(--color-background-primary)', color: completed ? 'var(--color-text-success)' : 'var(--color-text-primary)' }}>{completed ? '✓ Done' : 'Mark Done'}</button>}
                                 </div>
                             </div>
