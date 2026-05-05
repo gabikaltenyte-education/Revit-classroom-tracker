@@ -721,6 +721,78 @@ function TeacherView({ setView, sessionId }) {
                     </div>
                 )}
 
+                <div className="tab-buttons">
+                    <button className="tab-button active">Classroom View</button>
+                </div>
+
+                <h3 style={{ fontSize: '18px', fontWeight: '500', margin: '0 0 1rem' }}>Classroom Layout</h3>
+                {session.layout?.desks ? (
+                    <div style={{ marginBottom: '2rem', overflowX: 'auto' }}>
+                        <div style={{ position: 'relative', width: ((session.layout.gridCols || 7) * 120) + 'px', height: ((session.layout.gridRows || 5) * 90) + 'px', background: 'var(--color-background-secondary)', backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`, backgroundSize: '120px 90px', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)' }}>
+                            {session.layout.desks.map(desk => (
+                                <div key={desk.id} style={{ position: 'absolute', left: (desk.x + 6) + 'px', top: (desk.y + 6) + 'px', width: '108px' }}>
+                                    <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '6px', height: '70px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                        <p style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-secondary)', margin: '0', paddingLeft: '2px' }}>Desk {desk.id}</p>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+                                            {[desk.id * 2 - 1, desk.id * 2].map(n => {
+                                                const key = String(n);
+                                                const student = students[key];
+                                                const completed = student ? (student.completedSteps || []).length : 0;
+                                                const total = session.steps.length;
+                                                const progress = total > 0 && student ? Math.round((completed / total) * 100) : 0;
+                                                return (
+                                                    <div key={n} style={{ background: student ? (student.handRaised ? 'var(--color-background-warning)' : 'var(--color-background-info)') : 'var(--color-background-tertiary)', border: '0.5px solid var(--color-border-tertiary)', borderRadius: '4px', padding: '4px 2px', minHeight: '28px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+                                                        {student ? (
+                                                            <>
+                                                                <p style={{ fontSize: '9px', fontWeight: '600', margin: '0', textAlign: 'center', lineHeight: 1.2, color: student.handRaised ? 'var(--color-text-warning)' : 'var(--color-text-info)' }}>
+                                                                    {student.handRaised && '✋ '}{student.name.length > 12 ? student.name.substring(0, 12) + '...' : student.name}
+                                                                </p>
+                                                                <p style={{ fontSize: '8px', color: student.handRaised ? 'var(--color-text-warning)' : 'var(--color-text-info)', margin: '2px 0 0', fontWeight: '600' }}>
+                                                                    {progress}%
+                                                                </p>
+                                                            </>
+                                                        ) : (
+                                                            <p style={{ fontSize: '11px', color: 'var(--color-text-tertiary)', margin: 0, fontWeight: '600' }}>{n}</p>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <div style={{ marginBottom: '2rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${session.layout?.cols || 4}, 1fr)`, gap: '8px', maxWidth: '600px' }}>
+                            {Array.from({ length: (session.layout?.rows || 1) * (session.layout?.cols || 4) }, (_, i) => {
+                                const n = i + 1;
+                                const student = students[n];
+                                const completed = student ? (student.completedSteps || []).length : 0;
+                                const total = session.steps.length;
+                                const progress = total > 0 && student ? Math.round((completed / total) * 100) : 0;
+                                return (
+                                    <div key={n} style={{ background: student ? (student.handRaised ? 'var(--color-background-warning)' : 'var(--color-background-info)') : 'var(--color-background-tertiary)', border: '0.5px solid var(--color-border-tertiary)', borderRadius: 'var(--border-radius-md)', padding: '12px', minHeight: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+                                        {student ? (
+                                            <>
+                                                <p style={{ fontSize: '14px', fontWeight: '600', margin: '0', textAlign: 'center', color: student.handRaised ? 'var(--color-text-warning)' : 'var(--color-text-info)' }}>
+                                                    {student.handRaised && '✋ '}{student.name}
+                                                </p>
+                                                <p style={{ fontSize: '12px', color: student.handRaised ? 'var(--color-text-warning)' : 'var(--color-text-info)', margin: '4px 0 0', fontWeight: '500' }}>
+                                                    {progress}% ({completed}/{total})
+                                                </p>
+                                            </>
+                                        ) : (
+                                            <p style={{ fontSize: '20px', color: 'var(--color-text-tertiary)', margin: 0, fontWeight: '600' }}>{n}</p>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                     <div>
                         <h3 style={{ fontSize: '18px', fontWeight: '500', margin: '0 0 1rem' }}>Steps</h3>
