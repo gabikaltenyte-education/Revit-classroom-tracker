@@ -61,17 +61,23 @@
         button:hover { background: var(--color-background-secondary); }
         button:active { transform: scale(0.98); }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
-        input[type="text"], input[type="number"], textarea { font-family: var(--font-sans); font-size: 14px; padding: 8px 12px; border-radius: var(--border-radius-md); background: var(--color-background-primary); color: var(--color-text-primary); border: 0.5px solid var(--color-border-tertiary); width: 100%; }
+        input[type="text"], input[type="number"], input[type="file"], textarea, select { font-family: var(--font-sans); font-size: 14px; padding: 8px 12px; border-radius: var(--border-radius-md); background: var(--color-background-primary); color: var(--color-text-primary); border: 0.5px solid var(--color-border-tertiary); width: 100%; }
         textarea { resize: vertical; min-height: 100px; }
-        input:focus, textarea:focus { outline: none; border-color: var(--color-border-info); box-shadow: 0 0 0 3px rgba(55, 138, 221, 0.1); }
+        input:focus, textarea:focus, select:focus { outline: none; border-color: var(--color-border-info); box-shadow: 0 0 0 3px rgba(55, 138, 221, 0.1); }
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
-        .modal { background: var(--color-background-primary); border-radius: var(--border-radius-lg); padding: 1.5rem; max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; }
+        .modal { background: var(--color-background-primary); border-radius: var(--border-radius-lg); padding: 1.5rem; max-width: 800px; width: 100%; max-height: 90vh; overflow-y: auto; }
+        .tab-buttons { display: flex; gap: 8px; border-bottom: 1px solid var(--color-border-tertiary); margin-bottom: 1.5rem; }
+        .tab-button { background: transparent; border: none; border-bottom: 2px solid transparent; padding: 8px 16px; cursor: pointer; color: var(--color-text-secondary); }
+        .tab-button.active { color: var(--color-text-info); border-bottom-color: var(--color-border-info); }
+        .preview-image { max-width: 100%; border-radius: var(--border-radius-md); margin-top: 8px; border: 1px solid var(--color-border-tertiary); }
+        .thumbnail { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; border: 1px solid var(--color-border-tertiary); cursor: pointer; }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -88,332 +94,681 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const database = firebase.database();
+const storage = firebase.storage();
 const { useState, useEffect } = React;
 
 function App() {
     const [view, setView] = useState('home');
     const [templates, setTemplates] = useState({});
+    const [sessions, setSessions] = useState({});
+    const [classrooms, setClassrooms] = useState({});
     const [loading, setLoading] = useState(true);
+
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('session')) setView('student');
     }, []);
+
     useEffect(() => {
-        database.ref('templates').on('value', (snap) => { setTemplates(snap.val() || {}); setLoading(false); });
-        return () => database.ref('templates').off();
+        database.ref('templates').on('value', snap => setTemplates(snap.val() || {}));
+        database.ref('sessions').on('value', snap => setSessions(snap.val() || {}));
+        database.ref('classrooms').on('value', snap => { setClassrooms(snap.val() || {}); setLoading(false); });
+        return () => {
+            database.ref('templates').off();
+            database.ref('sessions').off();
+            database.ref('classrooms').off();
+        };
     }, []);
+
     if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>;
-    if (view === 'home') return <HomeScreen setView={setView} />;
-    if (view === 'template-manager') return <TemplateManager templates={templates} setView={setView} />;
-    if (view === 'teacher') return <TeacherView templates={templates} setView={setView} />;
+
     if (view === 'student') return <StudentView setView={setView} />;
-    return null;
+    if (view === 'home') return <HomeView setView={setView} templates={templates} sessions={sessions} classrooms={classrooms} />;
+    if (view === 'template') return <TemplateEditor setView={setView} />;
+    if (view === 'classroom') return <ClassroomEditor setView={setView} />;
+    if (view === 'batch-sessions') return <BatchSessionCreator setView={setView} templates={templates} classrooms={classrooms} />;
+    if (view.startsWith('teacher-')) {
+        const sessionId = view.substring(8);
+        return <TeacherView setView={setView} sessionId={sessionId} />;
+    }
+    if (view.startsWith('report-')) {
+        const sessionId = view.substring(7);
+        return <ReportView setView={setView} sessionId={sessionId} sessions={sessions} />;
+    }
+    return <HomeView setView={setView} templates={templates} sessions={sessions} classrooms={classrooms} />;
 }
 
-function HomeScreen({ setView }) {
+function HomeView({ setView, templates, sessions, classrooms }) {
+    const deleteSession = (sid) => {
+        if (confirm('Delete this session?')) database.ref('sessions/' + sid).remove();
+    };
+
+    const endSession = (sid) => {
+        if (confirm('End this session? Students can still submit screenshots after.')) {
+            database.ref('sessions/' + sid + '/active').set(false);
+            database.ref('sessions/' + sid + '/endedAt').set(Date.now());
+        }
+    };
+
+    const activeSessions = Object.entries(sessions).filter(([, s]) => s.active);
+    const endedSessions = Object.entries(sessions).filter(([, s]) => !s.active);
+
     return (
         <div style={{ padding: '2rem 0' }}>
-            <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                <h1 style={{ fontSize: '28px', fontWeight: '500', margin: '0 0 8px' }}>Revit Classroom Tracker</h1>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>Professional classroom management</p>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', maxWidth: '600px', margin: '0 auto' }}>
-                <button onClick={() => setView('teacher')} style={{ padding: '1.5rem', fontSize: '16px' }}>Teacher Dashboard</button>
-                <button onClick={() => setView('student')} style={{ padding: '1.5rem', fontSize: '16px' }}>Join as Student</button>
-                <button onClick={() => setView('template-manager')} style={{ padding: '1.5rem', fontSize: '16px' }}>Manage Templates</button>
-            </div>
-        </div>
-    );
-}
+            <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+                <h1 style={{ fontSize: '28px', fontWeight: '600', margin: '0 0 8px' }}>Classroom Tracker</h1>
+                <p style={{ fontSize: '16px', color: 'var(--color-text-secondary)', margin: '0 0 2rem' }}>Manage lectures, classrooms, and sessions</p>
 
-function TemplateManager({ templates, setView }) {
-    const [showModal, setShowModal] = useState(false);
-    const [editingTemplate, setEditingTemplate] = useState(null);
-    const templateList = Object.entries(templates).map(([id, t]) => ({ id, ...t }));
-    return (
-        <div style={{ padding: '1rem 0' }}>
-            <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem', marginBottom: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '0' }}>Lecture Templates</h2>
-                    <button onClick={() => setShowModal(true)}>Create New Template</button>
+                <div style={{ display: 'grid', gap: '12px', marginBottom: '2rem' }}>
+                    <button onClick={() => setView('template')} style={{ padding: '1rem', textAlign: 'left' }}>
+                        <div style={{ fontSize: '16px', fontWeight: '500' }}>📚 Create Lecture Template</div>
+                        <div style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>Define steps and content</div>
+                    </button>
+                    <button onClick={() => setView('classroom')} style={{ padding: '1rem', textAlign: 'left' }}>
+                        <div style={{ fontSize: '16px', fontWeight: '500' }}>🏫 Create Classroom Layout</div>
+                        <div style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>Define desk arrangements</div>
+                    </button>
+                    <button onClick={() => setView('batch-sessions')} style={{ padding: '1rem', textAlign: 'left' }}>
+                        <div style={{ fontSize: '16px', fontWeight: '500' }}>🚀 Batch Create Sessions</div>
+                        <div style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>Create multiple sessions at once</div>
+                    </button>
                 </div>
-                {templateList.length === 0 ? (
-                    <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', textAlign: 'center', padding: '2rem 0' }}>No templates yet. Create your first lecture template!</p>
-                ) : (
-                    <div style={{ display: 'grid', gap: '12px' }}>
-                        {templateList.map(t => (
-                            <div key={t.id} style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                    <p style={{ fontSize: '16px', fontWeight: '500', margin: '0 0 4px' }}>{t.name}</p>
-                                    <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0' }}>{t.steps.length} steps · {t.layout.desks ? t.layout.desks.length + ' desks' : t.layout.rows + '×' + t.layout.cols}</p>
-                                </div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button onClick={() => { setEditingTemplate(t); setShowModal(true); }}>Edit</button>
-                                    <button onClick={() => { if (confirm('Delete this template?')) database.ref('templates/' + t.id).remove(); }} style={{ background: 'var(--color-background-danger)', color: 'var(--color-text-danger)' }}>Delete</button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-            <button onClick={() => setView('home')} style={{ width: '100%' }}>Back to Home</button>
-            {showModal && <TemplateEditor template={editingTemplate} onClose={() => { setShowModal(false); setEditingTemplate(null); }} />}
-        </div>
-    );
-}
 
-function TemplateEditor({ template, onClose }) {
-    const [name, setName] = useState(template?.name || '');
-    const [steps, setSteps] = useState(template?.steps || ['']);
-    const [gridCols, setGridCols] = useState(template?.layout?.gridCols || 7);
-    const [gridRows, setGridRows] = useState(template?.layout?.gridRows || 5);
-    const [desks, setDesks] = useState(() => {
-        if (template?.layout?.desks) return template.layout.desks;
-        if (template?.layout?.rows) {
-            const d = []; let id = 1;
-            const dc = Math.ceil(template.layout.cols / 2);
-            for (let r = 0; r < template.layout.rows; r++)
-                for (let c = 0; c < dc; c++)
-                    d.push({ id: id++, x: c * 120, y: r * 90 });
-            return d;
-        }
-        return [];
-    });
-    const save = () => {
-        if (!name.trim()) { alert('Please enter a template name'); return; }
-        const filteredSteps = steps.filter(s => s.trim());
-        if (filteredSteps.length === 0) { alert('Please add at least one step'); return; }
-        if (desks.length === 0) { alert('Please add at least one desk'); return; }
-        const id = template?.id || database.ref('templates').push().key;
-        database.ref('templates/' + id).set({ name: name.trim(), steps: filteredSteps, layout: { desks, gridCols, gridRows }, created: template?.created || Date.now(), updated: Date.now() });
-        onClose();
-    };
-    return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '720px' }}>
-                <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '0 0 1.5rem' }}>{template ? 'Edit Template' : 'Create Template'}</h2>
-                <div style={{ marginBottom: '1rem' }}>
-                    <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Template Name</label>
-                    <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Revit Basics - Week 1" />
-                </div>
-                <div style={{ marginBottom: '1rem' }}>
-                    <DeskLayoutEditor desks={desks} onChange={setDesks} gridCols={gridCols} onGridColsChange={setGridCols} gridRows={gridRows} onGridRowsChange={setGridRows} />
-                </div>
-                <div style={{ marginBottom: '1.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                        <label style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>Steps</label>
-                        <button onClick={() => setSteps([...steps, ''])} style={{ fontSize: '13px', padding: '4px 12px' }}>+ Add Step</button>
-                    </div>
-                    {steps.map((step, i) => (
-                        <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                            <input type="text" value={step} onChange={e => { const s = [...steps]; s[i] = e.target.value; setSteps(s); }} placeholder={`Step ${i + 1}`} />
-                            <button onClick={() => setSteps(steps.filter((_, idx) => idx !== i))} style={{ background: 'var(--color-background-danger)', color: 'var(--color-text-danger)', padding: '8px 12px' }}>×</button>
-                        </div>
-                    ))}
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={save} style={{ flex: 1 }}>Save Template</button>
-                    <button onClick={onClose} style={{ flex: 1, background: 'transparent' }}>Cancel</button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function DeskLayoutEditor({ desks, onChange, gridCols, onGridColsChange, gridRows, onGridRowsChange }) {
-    const [dragging, setDragging] = useState(null);
-    const canvasRef = React.useRef(null);
-    const CW = 120, CH = 90, DW = 108, DH = 76, PAD = 6;
-    const canvasW = gridCols * CW;
-    const canvasH = gridRows * CH;
-
-    const snap = (x, y) => ({
-        x: Math.max(0, Math.min(gridCols - 1, Math.round(x / CW))) * CW,
-        y: Math.max(0, Math.min(gridRows - 1, Math.round(y / CH))) * CH
-    });
-
-    const addDesk = () => {
-        const occ = new Set(desks.map(d => `${Math.round(d.x / CW)},${Math.round(d.y / CH)}`));
-        let nx = 0, ny = 0;
-        outer: for (let r = 0; r < gridRows; r++)
-            for (let c = 0; c < gridCols; c++)
-                if (!occ.has(`${c},${r}`)) { nx = c * CW; ny = r * CH; break outer; }
-        const newId = desks.length > 0 ? Math.max(...desks.map(d => d.id)) + 1 : 1;
-        onChange([...desks, { id: newId, x: nx, y: ny }]);
-    };
-
-    const startDrag = (e, deskId) => {
-        e.preventDefault();
-        const d = desks.find(d => d.id === deskId);
-        setDragging({ deskId, startX: e.clientX, startY: e.clientY, origX: d.x, origY: d.y });
-    };
-
-    const onMove = (e) => {
-        if (!dragging) return;
-        const nx = Math.max(0, Math.min(canvasW - CW, dragging.origX + e.clientX - dragging.startX));
-        const ny = Math.max(0, Math.min(canvasH - CH, dragging.origY + e.clientY - dragging.startY));
-        onChange(desks.map(d => d.id === dragging.deskId ? { ...d, x: nx, y: ny } : d));
-    };
-
-    const stopDrag = () => {
-        if (dragging) {
-            const d = desks.find(d => d.id === dragging.deskId);
-            if (d) onChange(desks.map(d => d.id === dragging.deskId ? { ...d, ...snap(d.x, d.y) } : d));
-        }
-        setDragging(null);
-    };
-
-    return (
-        <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px', flexWrap: 'wrap' }}>
-                <label style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>Classroom Layout — {desks.length} desk{desks.length !== 1 ? 's' : ''} · {desks.length * 2} seats</label>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <label style={{ fontSize: '12px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>Cols</label>
-                    <input type="number" min="3" max="14" value={gridCols} onChange={e => onGridColsChange(Math.max(3, Math.min(14, parseInt(e.target.value) || 7)))} style={{ width: '50px' }} />
-                    <label style={{ fontSize: '12px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>Rows</label>
-                    <input type="number" min="2" max="10" value={gridRows} onChange={e => onGridRowsChange(Math.max(2, Math.min(10, parseInt(e.target.value) || 5)))} style={{ width: '50px' }} />
-                    <button onClick={addDesk} style={{ fontSize: '13px', padding: '4px 12px', whiteSpace: 'nowrap' }}>+ Add Desk</button>
-                </div>
-            </div>
-            <div style={{ overflowX: 'auto', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)' }}>
-                <div ref={canvasRef} style={{ position: 'relative', width: canvasW + 'px', height: canvasH + 'px', background: 'var(--color-background-secondary)', backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`, backgroundSize: `${CW}px ${CH}px`, cursor: dragging ? 'grabbing' : 'default', userSelect: 'none', flexShrink: 0 }}
-                    onMouseMove={onMove} onMouseUp={stopDrag} onMouseLeave={stopDrag}>
-                    {desks.length === 0 && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><p style={{ fontSize: '14px', color: 'var(--color-text-tertiary)', margin: 0 }}>Click "+ Add Desk" to start arranging</p></div>}
-                    {desks.map(desk => (
-                        <div key={desk.id} style={{ position: 'absolute', left: (desk.x + PAD) + 'px', top: (desk.y + PAD) + 'px', width: DW + 'px', cursor: dragging?.deskId === desk.id ? 'grabbing' : 'grab', zIndex: dragging?.deskId === desk.id ? 10 : 1 }} onMouseDown={e => startDrag(e, desk.id)}>
-                            <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px', height: (DH - PAD) + 'px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-secondary)', paddingLeft: '2px' }}>Desk {desk.id}</span>
-                                    <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onChange(desks.filter(d => d.id !== desk.id)); }} style={{ padding: '0 4px', fontSize: '13px', lineHeight: '1.2', background: 'transparent', border: 'none', color: 'var(--color-text-tertiary)', cursor: 'pointer' }}>×</button>
-                                </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px' }}>
-                                    {[desk.id * 2 - 1, desk.id * 2].map(n => (
-                                        <div key={n} style={{ background: 'var(--color-background-tertiary)', borderRadius: '4px', padding: '4px 0', textAlign: 'center', fontSize: '12px', fontWeight: '600', color: 'var(--color-text-secondary)' }}>{n}</div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '5px 0 0' }}>Drag desks to arrange. They snap to grid on release. Leave columns empty for aisle gaps.</p>
-        </div>
-    );
-}
-
-function TeacherView({ templates, setView }) {
-    const [sessionId, setSessionId] = useState(null);
-    const [session, setSession] = useState(null);
-    const [students, setStudents] = useState({});
-    const [showQR, setShowQR] = useState(false);
-    useEffect(() => {
-        if (!sessionId) return;
-        database.ref('sessions/' + sessionId).on('value', snap => setSession(snap.val()));
-        database.ref('sessions/' + sessionId + '/students').on('value', snap => setStudents(snap.val() || {}));
-        return () => { database.ref('sessions/' + sessionId).off(); database.ref('sessions/' + sessionId + '/students').off(); };
-    }, [sessionId]);
-    const startSession = async (templateId) => {
-        try {
-            const t = templates[templateId];
-            const id = database.ref('sessions').push().key;
-            await database.ref('sessions/' + id).set({ templateId, templateName: t.name, steps: t.steps, layout: t.layout, currentStep: 0, enabledSteps: [0], startTime: Date.now(), active: true });
-            setSessionId(id);
-        } catch (e) { alert('Error: ' + e.message); }
-    };
-    const enableNextStep = () => {
-        const next = session.currentStep + 1;
-        if (next < session.steps.length) database.ref('sessions/' + sessionId).update({ currentStep: next, enabledSteps: [...session.enabledSteps, next] });
-    };
-    const endSession = () => {
-        if (confirm('End this session?')) {
-            database.ref('sessions/' + sessionId).update({ active: false, endTime: Date.now() });
-            setSessionId(null); setSession(null);
-        }
-    };
-    const exportData = () => {
-        const csv = ['Name,Seat,Steps Completed,Hands Raised'].concat(Object.values(students).map(s => `${s.name},${s.desk},${(s.completedSteps || []).length},${s.handRaised ? 'Yes' : 'No'}`)).join('\n');
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-        a.download = `session-${sessionId}.csv`;
-        a.click();
-    };
-    if (!sessionId) {
-        const list = Object.entries(templates).map(([id, t]) => ({ id, ...t }));
-        return (
-            <div style={{ padding: '1rem 0' }}>
-                <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem' }}>
-                    <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '0 0 1rem' }}>Start a Session</h2>
-                    {list.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '2rem 0' }}>
-                            <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>No templates yet. Create one first!</p>
-                            <button onClick={() => setView('template-manager')}>Manage Templates</button>
-                        </div>
-                    ) : (
+                {activeSessions.length > 0 && (
+                    <>
+                        <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '2rem 0 1rem' }}>Active Sessions</h2>
                         <div style={{ display: 'grid', gap: '12px' }}>
-                            {list.map(t => (
-                                <div key={t.id} style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div>
-                                        <p style={{ fontSize: '16px', fontWeight: '500', margin: '0 0 4px' }}>{t.name}</p>
-                                        <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0' }}>{t.steps.length} steps</p>
+                            {activeSessions.map(([sid, session]) => (
+                                <div key={sid} style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.25rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <h3 style={{ fontSize: '18px', fontWeight: '500', margin: '0 0 4px' }}>{session.sessionName || session.templateName}</h3>
+                                            <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 8px' }}>
+                                                {session.templateName} • {session.classroomName}
+                                            </p>
+                                            <p style={{ fontSize: '14px', color: 'var(--color-text-tertiary)', margin: '0' }}>
+                                                {Object.keys(session.students || {}).length} students
+                                            </p>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button onClick={() => setView('teacher-' + sid)}>Manage</button>
+                                            <button onClick={() => endSession(sid)} style={{ background: 'var(--color-background-warning)', color: 'var(--color-text-warning)' }}>End</button>
+                                            <button onClick={() => deleteSession(sid)} style={{ background: 'var(--color-background-danger)', color: 'var(--color-text-danger)' }}>Delete</button>
+                                        </div>
                                     </div>
-                                    <button onClick={() => startSession(t.id)}>Start Session</button>
                                 </div>
                             ))}
                         </div>
-                    )}
-                </div>
-                <button onClick={() => setView('home')} style={{ width: '100%', marginTop: '12px' }}>Back</button>
+                    </>
+                )}
+
+                {endedSessions.length > 0 && (
+                    <>
+                        <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '2rem 0 1rem' }}>Past Sessions</h2>
+                        <div style={{ display: 'grid', gap: '12px' }}>
+                            {endedSessions.map(([sid, session]) => (
+                                <div key={sid} style={{ background: 'var(--color-background-tertiary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.25rem', opacity: 0.8 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <h3 style={{ fontSize: '18px', fontWeight: '500', margin: '0 0 4px' }}>{session.sessionName || session.templateName}</h3>
+                                            <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 8px' }}>
+                                                {session.templateName} • {session.classroomName}
+                                            </p>
+                                            <p style={{ fontSize: '14px', color: 'var(--color-text-tertiary)', margin: '0' }}>
+                                                Ended {new Date(session.endedAt || session.createdAt).toLocaleString()}
+                                            </p>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button onClick={() => setView('report-' + sid)}>View Report</button>
+                                            <button onClick={() => deleteSession(sid)} style={{ background: 'var(--color-background-danger)', color: 'var(--color-text-danger)' }}>Delete</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                )}
+
+                {Object.keys(templates).length > 0 && (
+                    <>
+                        <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '2rem 0 1rem' }}>Lecture Templates</h2>
+                        <div style={{ display: 'grid', gap: '8px' }}>
+                            {Object.entries(templates).map(([tid, template]) => (
+                                <div key={tid} style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)', padding: '1rem' }}>
+                                    <div style={{ fontSize: '16px', fontWeight: '500' }}>{template.name}</div>
+                                    <div style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+                                        {template.steps?.length || 0} steps
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                )}
+
+                {Object.keys(classrooms).length > 0 && (
+                    <>
+                        <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '2rem 0 1rem' }}>Classroom Layouts</h2>
+                        <div style={{ display: 'grid', gap: '8px' }}>
+                            {Object.entries(classrooms).map(([cid, classroom]) => (
+                                <div key={cid} style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)', padding: '1rem' }}>
+                                    <div style={{ fontSize: '16px', fontWeight: '500' }}>{classroom.name}</div>
+                                    <div style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+                                        {classroom.desks ? `${classroom.desks.length} desks` : `${classroom.rows}×${classroom.cols} grid`}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                )}
             </div>
+        </div>
+    );
+}
+
+function BatchSessionCreator({ setView, templates, classrooms }) {
+    const [selectedTemplate, setSelectedTemplate] = useState('');
+    const [selectedClassrooms, setSelectedClassrooms] = useState([]);
+    const [sessionPrefix, setSessionPrefix] = useState('');
+
+    const createSessions = () => {
+        if (!selectedTemplate || selectedClassrooms.length === 0 || !sessionPrefix.trim()) {
+            alert('Please select a template, at least one classroom, and enter a session name prefix');
+            return;
+        }
+
+        const template = templates[selectedTemplate];
+        const timestamp = Date.now();
+
+        selectedClassrooms.forEach((classroomId, index) => {
+            const classroom = classrooms[classroomId];
+            const sessionId = `session_${timestamp}_${index}`;
+            const sessionName = `${sessionPrefix} - ${classroom.name}`;
+
+            database.ref('sessions/' + sessionId).set({
+                templateId: selectedTemplate,
+                templateName: template.name,
+                classroomId: classroomId,
+                classroomName: classroom.name,
+                sessionName: sessionName,
+                steps: template.steps,
+                layout: classroom,
+                active: true,
+                createdAt: timestamp + index,
+                enabledSteps: [0],
+                students: {}
+            });
+        });
+
+        alert(`Created ${selectedClassrooms.length} sessions!`);
+        setView('home');
+    };
+
+    const toggleClassroom = (cid) => {
+        setSelectedClassrooms(prev =>
+            prev.includes(cid) ? prev.filter(id => id !== cid) : [...prev, cid]
         );
-    }
-    if (!session) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>;
-    const studentList = Object.values(students);
-    const sessionUrl = window.location.origin + window.location.pathname + '?session=' + sessionId;
-    const CW = 120, CH = 90, DW = 108, DH = 76, PAD = 6;
+    };
+
     return (
-        <div style={{ padding: '1rem 0' }}>
-            <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1rem 1.25rem', marginBottom: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <div>
-                        <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>{session.templateName}</p>
-                        <p style={{ fontSize: '20px', fontWeight: '500', margin: '4px 0 0' }}>Step {session.currentStep + 1}: {session.steps[session.currentStep]}</p>
+        <div style={{ padding: '2rem 0' }}>
+            <div style={{ maxWidth: '700px', margin: '0 auto' }}>
+                <button onClick={() => setView('home')} style={{ marginBottom: '1rem' }}>← Back</button>
+                
+                <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem' }}>
+                    <h2 style={{ fontSize: '24px', fontWeight: '600', margin: '0 0 8px' }}>Batch Create Sessions</h2>
+                    <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 2rem' }}>
+                        Create multiple sessions with the same lecture but different classroom layouts
+                    </p>
+
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Session Name Prefix</label>
+                        <input type="text" value={sessionPrefix} onChange={e => setSessionPrefix(e.target.value)} placeholder="e.g., Week 1 - Monday" />
+                        <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '4px 0 0' }}>
+                            Each session will be named: "{sessionPrefix} - [Classroom Name]"
+                        </p>
                     </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                        <button onClick={() => setShowQR(true)}>Share QR</button>
-                        {session.currentStep < session.steps.length - 1 && <button onClick={enableNextStep}>Next Step →</button>}
+
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Select Lecture Template</label>
+                        <select value={selectedTemplate} onChange={e => setSelectedTemplate(e.target.value)}>
+                            <option value="">-- Choose template --</option>
+                            {Object.entries(templates).map(([tid, template]) => (
+                                <option key={tid} value={tid}>{template.name} ({template.steps?.length || 0} steps)</option>
+                            ))}
+                        </select>
                     </div>
+
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '8px' }}>
+                            Select Classrooms ({selectedClassrooms.length} selected)
+                        </label>
+                        <div style={{ display: 'grid', gap: '8px' }}>
+                            {Object.entries(classrooms).map(([cid, classroom]) => {
+                                const isSelected = selectedClassrooms.includes(cid);
+                                return (
+                                    <button
+                                        key={cid}
+                                        onClick={() => toggleClassroom(cid)}
+                                        style={{
+                                            padding: '1rem',
+                                            textAlign: 'left',
+                                            background: isSelected ? 'var(--color-background-info)' : 'var(--color-background-secondary)',
+                                            color: isSelected ? 'var(--color-text-info)' : 'var(--color-text-primary)',
+                                            border: isSelected ? '2px solid var(--color-border-info)' : '0.5px solid var(--color-border-tertiary)'
+                                        }}
+                                    >
+                                        <div style={{ fontSize: '16px', fontWeight: '500' }}>
+                                            {isSelected ? '✓ ' : ''}{classroom.name}
+                                        </div>
+                                        <div style={{ fontSize: '14px', opacity: 0.8, marginTop: '4px' }}>
+                                            {classroom.desks ? `${classroom.desks.length} desks` : `${classroom.rows}×${classroom.cols} grid`}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <button onClick={createSessions} style={{ width: '100%', padding: '1rem', fontSize: '16px', fontWeight: '500' }} disabled={!selectedTemplate || selectedClassrooms.length === 0 || !sessionPrefix.trim()}>
+                        Create {selectedClassrooms.length || 0} Session{selectedClassrooms.length !== 1 ? 's' : ''}
+                    </button>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1rem' }}>
-                    {[['Students', studentList.length], ['Done', studentList.filter(s => (s.completedSteps || []).includes(session.currentStep)).length], ['Hands Up', studentList.filter(s => s.handRaised).length], ['Progress', `${session.currentStep + 1}/${session.steps.length}`]].map(([label, val]) => (
-                        <div key={label} style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '12px' }}>
-                            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '0 0 4px' }}>{label}</p>
-                            <p style={{ fontSize: '24px', fontWeight: '500', margin: '0' }}>{val}</p>
+            </div>
+        </div>
+    );
+}
+
+function TemplateEditor({ setView }) {
+    const [name, setName] = useState('');
+    const [steps, setSteps] = useState([{ title: '', description: '', imageUrl: '', properties: [] }]);
+    const [uploadingIndex, setUploadingIndex] = useState(null);
+
+    const addStep = () => setSteps([...steps, { title: '', description: '', imageUrl: '', properties: [] }]);
+    
+    const removeStep = (index) => setSteps(steps.filter((_, i) => i !== index));
+    
+    const updateStep = (index, field, value) => {
+        const newSteps = [...steps];
+        newSteps[index][field] = value;
+        setSteps(newSteps);
+    };
+
+    const addProperty = (stepIndex) => {
+        const newSteps = [...steps];
+        newSteps[stepIndex].properties = [...(newSteps[stepIndex].properties || []), { key: '', value: '' }];
+        setSteps(newSteps);
+    };
+
+    const updateProperty = (stepIndex, propIndex, field, value) => {
+        const newSteps = [...steps];
+        newSteps[stepIndex].properties[propIndex][field] = value;
+        setSteps(newSteps);
+    };
+
+    const removeProperty = (stepIndex, propIndex) => {
+        const newSteps = [...steps];
+        newSteps[stepIndex].properties = newSteps[stepIndex].properties.filter((_, i) => i !== propIndex);
+        setSteps(newSteps);
+    };
+
+    const uploadImage = async (stepIndex, file) => {
+        if (!file) return;
+        setUploadingIndex(stepIndex);
+        try {
+            const ref = storage.ref().child(`step-images/${Date.now()}_${file.name}`);
+            await ref.put(file);
+            const url = await ref.getDownloadURL();
+            updateStep(stepIndex, 'imageUrl', url);
+        } catch (error) {
+            alert('Upload failed: ' + error.message);
+        }
+        setUploadingIndex(null);
+    };
+
+    const saveTemplate = () => {
+        if (!name.trim()) return alert('Please enter a template name');
+        if (steps.some(s => !s.title.trim())) return alert('All steps must have a title');
+        
+        database.ref('templates').push({
+            name: name.trim(),
+            steps,
+            createdAt: Date.now()
+        });
+        setView('home');
+    };
+
+    return (
+        <div style={{ padding: '2rem 0' }}>
+            <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+                <button onClick={() => setView('home')} style={{ marginBottom: '1rem' }}>← Back</button>
+                
+                <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem' }}>
+                    <h2 style={{ fontSize: '24px', fontWeight: '600', margin: '0 0 8px' }}>Create Lecture Template</h2>
+                    <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 2rem' }}>
+                        Define steps with screenshots, instructions, and properties
+                    </p>
+
+                    <div style={{ marginBottom: '2rem' }}>
+                        <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Template Name</label>
+                        <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Introduction to Revit" />
+                    </div>
+
+                    <h3 style={{ fontSize: '18px', fontWeight: '500', margin: '0 0 1rem' }}>Steps</h3>
+                    
+                    {steps.map((step, i) => (
+                        <div key={i} style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.25rem', marginBottom: '1rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                <h4 style={{ fontSize: '16px', fontWeight: '500', margin: 0 }}>Step {i + 1}</h4>
+                                <button onClick={() => removeStep(i)} style={{ background: 'var(--color-background-danger)', color: 'var(--color-text-danger)' }}>Remove</button>
+                            </div>
+
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Step Title</label>
+                                <input type="text" value={step.title} onChange={e => updateStep(i, 'title', e.target.value)} placeholder="e.g., Create a new wall" />
+                            </div>
+
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Instructions</label>
+                                <textarea value={step.description} onChange={e => updateStep(i, 'description', e.target.value)} placeholder="Detailed instructions for this step..." />
+                            </div>
+
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Reference Screenshot</label>
+                                <input type="file" accept="image/*" onChange={e => uploadImage(i, e.target.files[0])} disabled={uploadingIndex === i} />
+                                {uploadingIndex === i && <p style={{ fontSize: '12px', color: 'var(--color-text-info)', margin: '4px 0 0' }}>Uploading...</p>}
+                                {step.imageUrl && <img src={step.imageUrl} alt="Reference" className="preview-image" />}
+                            </div>
+
+                            <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                    <label style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>Properties to Fill</label>
+                                    <button onClick={() => addProperty(i)} style={{ fontSize: '12px', padding: '4px 12px' }}>+ Add Property</button>
+                                </div>
+                                {step.properties?.map((prop, pi) => (
+                                    <div key={pi} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '8px', marginBottom: '8px' }}>
+                                        <input type="text" value={prop.key} onChange={e => updateProperty(i, pi, 'key', e.target.value)} placeholder="Property name" />
+                                        <input type="text" value={prop.value} onChange={e => updateProperty(i, pi, 'value', e.target.value)} placeholder="Expected value" />
+                                        <button onClick={() => removeProperty(i, pi)} style={{ background: 'var(--color-background-danger)', color: 'var(--color-text-danger)' }}>×</button>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     ))}
+
+                    <button onClick={addStep} style={{ width: '100%', marginBottom: '1rem' }}>+ Add Step</button>
+                    <button onClick={saveTemplate} style={{ width: '100%', padding: '1rem', fontSize: '16px', fontWeight: '500' }}>Save Template</button>
                 </div>
-                {session.layout?.desks ? (
-                    <div style={{ overflowX: 'auto', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)' }}>
-                        <div style={{ position: 'relative', width: ((session.layout.gridCols || 7) * CW) + 'px', height: ((session.layout.gridRows || 5) * CH) + 'px', background: 'var(--color-background-secondary)', backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`, backgroundSize: `${CW}px ${CH}px`, flexShrink: 0 }}>
-                            {session.layout.desks.map(desk => {
-                                const s1 = students[String(desk.id * 2 - 1)];
-                                const s2 = students[String(desk.id * 2)];
+            </div>
+        </div>
+    );
+}
+
+function ClassroomEditor({ setView }) {
+    const [name, setName] = useState('');
+    const [layoutType, setLayoutType] = useState('grid');
+    const [rows, setRows] = useState(4);
+    const [cols, setCols] = useState(6);
+    const [desks, setDesks] = useState([]);
+    const [gridRows, setGridRows] = useState(5);
+    const [gridCols, setGridCols] = useState(7);
+
+    const saveClassroom = () => {
+        if (!name.trim()) return alert('Please enter a classroom name');
+        
+        const classroom = {
+            name: name.trim(),
+            createdAt: Date.now()
+        };
+
+        if (layoutType === 'grid') {
+            classroom.rows = rows;
+            classroom.cols = cols;
+        } else {
+            if (desks.length === 0) return alert('Please add at least one desk');
+            classroom.desks = desks;
+            classroom.gridRows = gridRows;
+            classroom.gridCols = gridCols;
+        }
+
+        database.ref('classrooms').push(classroom);
+        setView('home');
+    };
+
+    const addDesk = () => {
+        const newId = desks.length + 1;
+        setDesks([...desks, { id: newId, x: 0, y: 0 }]);
+    };
+
+    const removeDesk = (id) => {
+        setDesks(desks.filter(d => d.id !== id));
+    };
+
+    const updateDeskPosition = (id, x, y) => {
+        setDesks(desks.map(d => d.id === id ? { ...d, x, y } : d));
+    };
+
+    const CW = 120, CH = 90;
+
+    return (
+        <div style={{ padding: '2rem 0' }}>
+            <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+                <button onClick={() => setView('home')} style={{ marginBottom: '1rem' }}>← Back</button>
+                
+                <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem' }}>
+                    <h2 style={{ fontSize: '24px', fontWeight: '600', margin: '0 0 8px' }}>Create Classroom Layout</h2>
+                    <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 2rem' }}>
+                        Define the desk arrangement for a classroom
+                    </p>
+
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Classroom Name</label>
+                        <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Room A101" />
+                    </div>
+
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Layout Type</label>
+                        <select value={layoutType} onChange={e => setLayoutType(e.target.value)}>
+                            <option value="grid">Simple Grid</option>
+                            <option value="custom">Custom Desk Positions</option>
+                        </select>
+                    </div>
+
+                    {layoutType === 'grid' ? (
+                        <>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Rows</label>
+                                    <input type="number" min="1" max="10" value={rows} onChange={e => setRows(parseInt(e.target.value) || 1)} />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Columns</label>
+                                    <input type="number" min="1" max="10" value={cols} onChange={e => setCols(parseInt(e.target.value) || 1)} />
+                                </div>
+                            </div>
+                            <div style={{ padding: '1rem', background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', textAlign: 'center' }}>
+                                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: 0 }}>
+                                    Total seats: {rows * cols}
+                                </p>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Grid Rows</label>
+                                    <input type="number" min="3" max="15" value={gridRows} onChange={e => setGridRows(parseInt(e.target.value) || 5)} />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Grid Columns</label>
+                                    <input type="number" min="3" max="15" value={gridCols} onChange={e => setGridCols(parseInt(e.target.value) || 7)} />
+                                </div>
+                            </div>
+                            
+                            <button onClick={addDesk} style={{ marginBottom: '1rem' }}>+ Add Desk</button>
+
+                            <div style={{ overflowX: 'auto', marginBottom: '1rem' }}>
+                                <div style={{ position: 'relative', width: gridCols * CW + 'px', height: gridRows * CH + 'px', background: 'var(--color-background-secondary)', backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`, backgroundSize: `${CW}px ${CH}px`, borderRadius: 'var(--border-radius-md)' }}>
+                                    {desks.map(desk => (
+                                        <div key={desk.id} style={{ position: 'absolute', left: desk.x + 'px', top: desk.y + 'px', padding: '8px', background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', cursor: 'move' }} draggable onDragEnd={e => {
+                                            const rect = e.target.parentElement.getBoundingClientRect();
+                                            const x = Math.round((e.clientX - rect.left) / CW) * CW;
+                                            const y = Math.round((e.clientY - rect.top) / CH) * CH;
+                                            updateDeskPosition(desk.id, Math.max(0, Math.min(x, (gridCols - 1) * CW)), Math.max(0, Math.min(y, (gridRows - 1) * CH)));
+                                        }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                                                <span style={{ fontSize: '14px', fontWeight: '500' }}>Desk {desk.id}</span>
+                                                <button onClick={() => removeDesk(desk.id)} style={{ fontSize: '12px', padding: '2px 6px', background: 'var(--color-background-danger)', color: 'var(--color-text-danger)' }}>×</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '0 0 1rem' }}>
+                                Drag desks to position them. Each desk has 2 seats. Total: {desks.length} desks, {desks.length * 2} seats
+                            </p>
+                        </>
+                    )}
+
+                    <button onClick={saveClassroom} style={{ width: '100%', padding: '1rem', fontSize: '16px', fontWeight: '500' }}>Save Classroom</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function TeacherView({ setView, sessionId }) {
+    const [session, setSession] = useState(null);
+    const [students, setStudents] = useState({});
+    const [qrModal, setQrModal] = useState(false);
+
+    useEffect(() => {
+        database.ref('sessions/' + sessionId).on('value', snap => setSession(snap.val()));
+        database.ref('sessions/' + sessionId + '/students').on('value', snap => setStudents(snap.val() || {}));
+        return () => {
+            database.ref('sessions/' + sessionId).off();
+            database.ref('sessions/' + sessionId + '/students').off();
+        };
+    }, [sessionId]);
+
+    useEffect(() => {
+        if (qrModal) {
+            setTimeout(() => {
+                const el = document.getElementById('qrcode');
+                if (el) {
+                    el.innerHTML = '';
+                    new QRCode(el, {
+                        text: window.location.origin + window.location.pathname + '?session=' + sessionId,
+                        width: 256,
+                        height: 256
+                    });
+                }
+            }, 100);
+        }
+    }, [qrModal, sessionId]);
+
+    if (!session) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>;
+
+    const toggleStep = (stepIndex) => {
+        const enabled = session.enabledSteps || [0];
+        const newEnabled = enabled.includes(stepIndex) 
+            ? enabled.filter(i => i !== stepIndex)
+            : [...enabled, stepIndex].sort((a, b) => a - b);
+        database.ref('sessions/' + sessionId + '/enabledSteps').set(newEnabled);
+    };
+
+    const enableAllSteps = () => {
+        const allSteps = session.steps.map((_, i) => i);
+        database.ref('sessions/' + sessionId + '/enabledSteps').set(allSteps);
+    };
+
+    const resetHands = () => {
+        Object.keys(students).forEach(deskId => {
+            database.ref('sessions/' + sessionId + '/students/' + deskId + '/handRaised').set(false);
+        });
+    };
+
+    const studentsWithHands = Object.entries(students).filter(([, s]) => s.handRaised);
+
+    return (
+        <div style={{ padding: '2rem 0' }}>
+            <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+                <button onClick={() => setView('home')} style={{ marginBottom: '1rem' }}>← Back to Home</button>
+
+                <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem', marginBottom: '1rem' }}>
+                    <h2 style={{ fontSize: '24px', fontWeight: '600', margin: '0 0 8px' }}>{session.sessionName || session.templateName}</h2>
+                    <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 1rem' }}>
+                        {session.templateName} • {session.classroomName}
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={() => setQrModal(true)}>Show QR Code</button>
+                        <button onClick={enableAllSteps}>Enable All Steps</button>
+                        <button onClick={resetHands}>Reset All Hands</button>
+                    </div>
+                </div>
+
+                {studentsWithHands.length > 0 && (
+                    <div style={{ background: 'var(--color-background-warning)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-warning)', padding: '1.25rem', marginBottom: '1rem' }}>
+                        <h3 style={{ fontSize: '16px', fontWeight: '500', color: 'var(--color-text-warning)', margin: '0 0 8px' }}>
+                            Raised Hands ({studentsWithHands.length})
+                        </h3>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {studentsWithHands.map(([deskId, student]) => (
+                                <span key={deskId} style={{ padding: '6px 12px', background: 'var(--color-background-primary)', borderRadius: '6px', fontSize: '14px' }}>
+                                    ✋ {student.name}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                    <div>
+                        <h3 style={{ fontSize: '18px', fontWeight: '500', margin: '0 0 1rem' }}>Steps</h3>
+                        <div style={{ display: 'grid', gap: '12px' }}>
+                            {session.steps.map((step, i) => {
+                                const enabled = (session.enabledSteps || [0]).includes(i);
+                                const completionCount = Object.values(students).filter(s => (s.completedSteps || []).includes(i)).length;
                                 return (
-                                    <div key={desk.id} style={{ position: 'absolute', left: (desk.x + PAD) + 'px', top: (desk.y + PAD) + 'px', width: DW + 'px' }}>
-                                        <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px', height: (DH - PAD) + 'px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                            <p style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-secondary)', margin: '0', paddingLeft: '2px' }}>Desk {desk.id}</p>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px' }}>
-                                                {[[s1, desk.id * 2 - 1], [s2, desk.id * 2]].map(([s, seatNum]) => {
-                                                    const done = (s?.completedSteps || []).includes(session.currentStep);
-                                                    return (
-                                                        <div key={seatNum} style={{ background: s ? (done ? 'var(--color-background-success)' : 'var(--color-background-info)') : 'var(--color-background-tertiary)', border: s?.handRaised ? '1.5px solid var(--color-border-warning)' : '0.5px solid var(--color-border-tertiary)', borderRadius: '4px', padding: '2px', textAlign: 'center', minHeight: '36px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                                            {s ? (<>
-                                                                <p style={{ fontSize: '9px', fontWeight: '600', margin: '0', wordBreak: 'break-word', lineHeight: '1.2' }}>{s.name}</p>
-                                                                <p style={{ fontSize: '8px', color: 'var(--color-text-secondary)', margin: '1px 0 0' }}>{(s.completedSteps || []).length}/{session.steps.length}</p>
-                                                                {s.handRaised && <div style={{ fontSize: '10px' }}>✋</div>}
-                                                            </>) : <p style={{ fontSize: '10px', fontWeight: '600', color: 'var(--color-text-tertiary)', margin: 0 }}>{seatNum}</p>}
-                                                        </div>
-                                                    );
-                                                })}
+                                    <div key={i} style={{ background: enabled ? 'var(--color-background-primary)' : 'var(--color-background-tertiary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                                            <div>
+                                                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>Step {i + 1}</p>
+                                                <p style={{ fontSize: '16px', fontWeight: '500', margin: '4px 0 0' }}>{step.title || step}</p>
+                                            </div>
+                                            <button onClick={() => toggleStep(i)} style={{ background: enabled ? 'var(--color-background-success)' : 'var(--color-background-secondary)', color: enabled ? 'var(--color-text-success)' : 'var(--color-text-primary)' }}>
+                                                {enabled ? 'Enabled' : 'Enable'}
+                                            </button>
+                                        </div>
+                                        <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: 0 }}>
+                                            {completionCount}/{Object.keys(students).length} completed
+                                        </p>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 style={{ fontSize: '18px', fontWeight: '500', margin: '0 0 1rem' }}>Students ({Object.keys(students).length})</h3>
+                        <div style={{ display: 'grid', gap: '8px' }}>
+                            {Object.entries(students).map(([deskId, student]) => {
+                                const completed = (student.completedSteps || []).length;
+                                const total = session.steps.length;
+                                const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+                                return (
+                                    <div key={deskId} style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)', padding: '1rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <p style={{ fontSize: '16px', fontWeight: '500', margin: '0' }}>
+                                                    {student.handRaised && '✋ '}{student.name}
+                                                </p>
+                                                <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '4px 0 0' }}>
+                                                    Seat {deskId}
+                                                </p>
+                                            </div>
+                                            <div style={{ textAlign: 'right' }}>
+                                                <p style={{ fontSize: '20px', fontWeight: '600', margin: 0 }}>{progress}%</p>
+                                                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: 0 }}>{completed}/{total}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -421,104 +776,269 @@ function TeacherView({ templates, setView }) {
                             })}
                         </div>
                     </div>
-                ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${session.layout?.cols || 4}, 1fr)`, gap: '8px' }}>
-                        {Array.from({ length: (session.layout?.rows || 1) * (session.layout?.cols || 4) }, (_, i) => {
-                            const n = i + 1; const s = students[n]; const done = (s?.completedSteps || []).includes(session.currentStep);
-                            return (
-                                <div key={n} style={{ background: s ? (done ? 'var(--color-background-success)' : 'var(--color-background-secondary)') : 'var(--color-background-tertiary)', border: s?.handRaised ? '2px solid var(--color-border-warning)' : '0.5px solid var(--color-border-tertiary)', borderRadius: 'var(--border-radius-md)', padding: '12px 8px', textAlign: 'center', minHeight: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                    <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '0 0 4px', fontWeight: '500' }}>{n}</p>
-                                    {s ? (<><p style={{ fontSize: '13px', fontWeight: '500', margin: '0', wordBreak: 'break-word' }}>{s.name}</p><p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '2px 0 0' }}>{(s.completedSteps || []).length}/{session.steps.length}</p>{s.handRaised && <div style={{ fontSize: '20px' }}>✋</div>}</>) : <p style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', margin: '0' }}>Empty</p>}
-                                </div>
-                            );
-                        })}
+                </div>
+            </div>
+
+            {qrModal && (
+                <div className="modal-overlay" onClick={() => setQrModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
+                        <h3 style={{ fontSize: '20px', fontWeight: '500', margin: '0 0 1rem' }}>Student Access</h3>
+                        <div id="qrcode" style={{ display: 'inline-block', marginBottom: '1rem' }}></div>
+                        <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 1rem', wordBreak: 'break-all' }}>
+                            {window.location.origin + window.location.pathname + '?session=' + sessionId}
+                        </p>
+                        <button onClick={() => setQrModal(false)}>Close</button>
                     </div>
-                )}
-            </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={exportData} style={{ flex: 1 }}>Export Data</button>
-                <button onClick={endSession} style={{ flex: 1, background: 'var(--color-background-danger)', color: 'var(--color-text-danger)' }}>End Session</button>
-            </div>
-            {showQR && <QRModal sessionUrl={sessionUrl} onClose={() => setShowQR(false)} />}
+                </div>
+            )}
         </div>
     );
 }
 
-function QRModal({ sessionUrl, onClose }) {
+function ReportView({ setView, sessionId, sessions }) {
+    const [session, setSession] = useState(null);
+    const [students, setStudents] = useState({});
+
     useEffect(() => {
-        const el = document.getElementById('qrcode');
-        if (el) { el.innerHTML = ''; new QRCode(el, { text: sessionUrl, width: 256, height: 256 }); }
-    }, [sessionUrl]);
+        const sess = sessions[sessionId];
+        setSession(sess);
+        setStudents(sess?.students || {});
+    }, [sessionId, sessions]);
+
+    if (!session) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>;
+
+    const studentList = Object.entries(students).map(([deskId, student]) => ({
+        deskId,
+        ...student,
+        completedCount: (student.completedSteps || []).length,
+        progress: session.steps.length > 0 ? Math.round(((student.completedSteps || []).length / session.steps.length) * 100) : 0
+    })).sort((a, b) => b.completedCount - a.completedCount);
+
+    const downloadCSV = () => {
+        const headers = ['Name', 'Seat', 'Steps Completed', 'Progress %', ...session.steps.map((s, i) => `Step ${i + 1}`)];
+        const rows = studentList.map(s => [
+            s.name,
+            s.deskId,
+            s.completedCount,
+            s.progress,
+            ...session.steps.map((_, i) => (s.completedSteps || []).includes(i) ? 'Yes' : 'No')
+        ]);
+        const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `report_${session.sessionName || session.templateName}_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+    };
+
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
-                <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '0 0 1rem' }}>Student Join Link</h2>
-                <div id="qrcode" style={{ display: 'inline-block', marginBottom: '1rem' }}></div>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 1rem', wordBreak: 'break-all' }}>{sessionUrl}</p>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => { navigator.clipboard.writeText(sessionUrl); alert('Copied!'); }} style={{ flex: 1 }}>Copy Link</button>
-                    <button onClick={onClose} style={{ flex: 1 }}>Close</button>
+        <div style={{ padding: '2rem 0' }}>
+            <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+                <button onClick={() => setView('home')} style={{ marginBottom: '1rem' }}>← Back</button>
+
+                <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem', marginBottom: '1.5rem' }}>
+                    <h2 style={{ fontSize: '24px', fontWeight: '600', margin: '0 0 8px' }}>Session Report</h2>
+                    <p style={{ fontSize: '16px', color: 'var(--color-text-secondary)', margin: '0 0 1rem' }}>
+                        {session.sessionName || session.templateName}
+                    </p>
+                    <p style={{ fontSize: '14px', color: 'var(--color-text-tertiary)', margin: '0 0 1.5rem' }}>
+                        {session.templateName} • {session.classroomName} • Ended {new Date(session.endedAt || session.createdAt).toLocaleString()}
+                    </p>
+                    <button onClick={downloadCSV}>Download CSV Report</button>
                 </div>
+
+                <div style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem', marginBottom: '1.5rem' }}>
+                    <h3 style={{ fontSize: '18px', fontWeight: '500', margin: '0 0 1rem' }}>Summary</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+                        <div>
+                            <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: 0 }}>Total Students</p>
+                            <p style={{ fontSize: '28px', fontWeight: '600', margin: '4px 0 0' }}>{studentList.length}</p>
+                        </div>
+                        <div>
+                            <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: 0 }}>Total Steps</p>
+                            <p style={{ fontSize: '28px', fontWeight: '600', margin: '4px 0 0' }}>{session.steps.length}</p>
+                        </div>
+                        <div>
+                            <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: 0 }}>Avg Completion</p>
+                            <p style={{ fontSize: '28px', fontWeight: '600', margin: '4px 0 0' }}>
+                                {studentList.length > 0 ? Math.round(studentList.reduce((sum, s) => sum + s.progress, 0) / studentList.length) : 0}%
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 style={{ fontSize: '18px', fontWeight: '500', margin: '0 0 1rem' }}>Student Participation</h3>
+                <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr style={{ background: 'var(--color-background-secondary)' }}>
+                                <th style={{ padding: '1rem', textAlign: 'left', fontSize: '14px', fontWeight: '500' }}>Student</th>
+                                <th style={{ padding: '1rem', textAlign: 'left', fontSize: '14px', fontWeight: '500' }}>Seat</th>
+                                <th style={{ padding: '1rem', textAlign: 'right', fontSize: '14px', fontWeight: '500' }}>Progress</th>
+                                <th style={{ padding: '1rem', textAlign: 'left', fontSize: '14px', fontWeight: '500' }}>Completed Steps</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {studentList.map(student => (
+                                <tr key={student.deskId} style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
+                                    <td style={{ padding: '1rem', fontSize: '14px' }}>{student.name}</td>
+                                    <td style={{ padding: '1rem', fontSize: '14px', color: 'var(--color-text-secondary)' }}>{student.deskId}</td>
+                                    <td style={{ padding: '1rem', textAlign: 'right' }}>
+                                        <span style={{ fontSize: '16px', fontWeight: '500' }}>{student.progress}%</span>
+                                        <span style={{ fontSize: '12px', color: 'var(--color-text-tertiary)', marginLeft: '8px' }}>
+                                            ({student.completedCount}/{session.steps.length})
+                                        </span>
+                                    </td>
+                                    <td style={{ padding: '1rem' }}>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                            {session.steps.map((_, i) => (
+                                                <span key={i} style={{
+                                                    width: '24px',
+                                                    height: '24px',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    borderRadius: '4px',
+                                                    fontSize: '11px',
+                                                    fontWeight: '600',
+                                                    background: (student.completedSteps || []).includes(i) ? 'var(--color-background-success)' : 'var(--color-background-tertiary)',
+                                                    color: (student.completedSteps || []).includes(i) ? 'var(--color-text-success)' : 'var(--color-text-tertiary)'
+                                                }}>
+                                                    {i + 1}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                {Object.values(students).some(s => s.screenshots && Object.keys(s.screenshots).length > 0) && (
+                    <>
+                        <h3 style={{ fontSize: '18px', fontWeight: '500', margin: '2rem 0 1rem' }}>Student Submissions</h3>
+                        <div style={{ display: 'grid', gap: '1rem' }}>
+                            {Object.entries(students).filter(([, s]) => s.screenshots && Object.keys(s.screenshots).length > 0).map(([deskId, student]) => (
+                                <div key={deskId} style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.25rem' }}>
+                                    <h4 style={{ fontSize: '16px', fontWeight: '500', margin: '0 0 1rem' }}>{student.name} (Seat {deskId})</h4>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '12px' }}>
+                                        {Object.entries(student.screenshots || {}).map(([stepId, url]) => (
+                                            <div key={stepId}>
+                                                <a href={url} target="_blank" rel="noopener noreferrer">
+                                                    <img src={url} alt={`Step ${parseInt(stepId) + 1}`} className="thumbnail" />
+                                                </a>
+                                                <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '4px 0 0', textAlign: 'center' }}>
+                                                    Step {parseInt(stepId) + 1}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                )}
             </div>
         </div>
     );
 }
 
 function StudentView({ setView }) {
-    const [sessionId, setSessionId] = useState(null);
+    const [sessionId, setSessionId] = useState('');
     const [session, setSession] = useState(null);
     const [students, setStudents] = useState({});
     const [myDesk, setMyDesk] = useState(null);
     const [name, setName] = useState('');
-    const [selectedDesk, setSelectedDesk] = useState(null);
+    const [selectedDesk, setSelectedDesk] = useState('');
+    const [uploadingStep, setUploadingStep] = useState(null);
+    const [imageModal, setImageModal] = useState(null);
+
     useEffect(() => {
-        const sid = new URLSearchParams(window.location.search).get('session');
-        if (!sid) return;
-        setSessionId(sid);
-        const stored = localStorage.getItem('myDesk_' + sid);
-        if (stored) setMyDesk(stored);
-        database.ref('sessions/' + sid).on('value', snap => setSession(snap.val()));
-        database.ref('sessions/' + sid + '/students').on('value', snap => setStudents(snap.val() || {}));
-        return () => { database.ref('sessions/' + sid).off(); database.ref('sessions/' + sid + '/students').off(); };
+        const params = new URLSearchParams(window.location.search);
+        const sid = params.get('session');
+        if (sid) setSessionId(sid);
     }, []);
-    const joinSession = async () => {
-        if (!name.trim() || !selectedDesk) { alert('Enter your name and select a seat'); return; }
-        if (students[selectedDesk]) { alert('Seat already taken'); return; }
-        await database.ref('sessions/' + sessionId + '/students/' + selectedDesk).set({ name: name.trim(), desk: selectedDesk, currentStep: 0, completedSteps: [], handRaised: false, joinTime: Date.now() });
+
+    useEffect(() => {
+        if (!sessionId) return;
+        database.ref('sessions/' + sessionId).on('value', snap => setSession(snap.val()));
+        database.ref('sessions/' + sessionId + '/students').on('value', snap => setStudents(snap.val() || {}));
+        const savedDesk = localStorage.getItem('myDesk_' + sessionId);
+        if (savedDesk) setMyDesk(savedDesk);
+        return () => {
+            database.ref('sessions/' + sessionId).off();
+            database.ref('sessions/' + sessionId + '/students').off();
+        };
+    }, [sessionId]);
+
+    const joinSession = () => {
+        if (!name.trim() || !selectedDesk) return alert('Enter your name and select a seat');
+        database.ref('sessions/' + sessionId + '/students/' + selectedDesk).set({
+            name: name.trim(),
+            joinedAt: Date.now(),
+            completedSteps: [],
+            handRaised: false
+        });
         localStorage.setItem('myDesk_' + sessionId, selectedDesk);
         setMyDesk(selectedDesk);
     };
-    const markDone = (i) => {
-        const s = students[myDesk];
-        if (!s) return;
-        const steps = s.completedSteps || [];
-        if (steps.includes(i)) return;
-        database.ref('sessions/' + sessionId + '/students/' + myDesk + '/completedSteps').set([...steps, i]);
+
+    const markDone = (stepIndex) => {
+        const completed = students[myDesk]?.completedSteps || [];
+        if (!completed.includes(stepIndex)) {
+            database.ref('sessions/' + sessionId + '/students/' + myDesk + '/completedSteps').set([...completed, stepIndex].sort((a, b) => a - b));
+        }
     };
+
     const toggleHand = () => {
-        const s = students[myDesk];
-        if (!s) return;
-        database.ref('sessions/' + sessionId + '/students/' + myDesk + '/handRaised').set(!s.handRaised);
+        const current = students[myDesk]?.handRaised || false;
+        database.ref('sessions/' + sessionId + '/students/' + myDesk + '/handRaised').set(!current);
     };
-    if (!sessionId || !session) return <div style={{ padding: '2rem 0', textAlign: 'center' }}><p style={{ color: 'var(--color-text-secondary)' }}>No active session. Use the link from your teacher.</p><button onClick={() => setView('home')} style={{ marginTop: '1rem' }}>Back</button></div>;
-    if (!session.active) return <div style={{ padding: '2rem 0', textAlign: 'center' }}><p style={{ color: 'var(--color-text-secondary)' }}>Session ended.</p><button onClick={() => setView('home')} style={{ marginTop: '1rem' }}>Back</button></div>;
+
+    const uploadScreenshot = async (stepIndex, file) => {
+        if (!file) return;
+        setUploadingStep(stepIndex);
+        try {
+            const ref = storage.ref().child(`submissions/${sessionId}/${myDesk}/${stepIndex}_${Date.now()}_${file.name}`);
+            await ref.put(file);
+            const url = await ref.getDownloadURL();
+            database.ref('sessions/' + sessionId + '/students/' + myDesk + '/screenshots/' + stepIndex).set(url);
+        } catch (error) {
+            alert('Upload failed: ' + error.message);
+        }
+        setUploadingStep(null);
+    };
+
+    if (!sessionId || !session) {
+        return (
+            <div style={{ padding: '2rem 0', textAlign: 'center' }}>
+                <p style={{ color: 'var(--color-text-secondary)' }}>No active session. Use the link from your teacher.</p>
+                <button onClick={() => setView('home')} style={{ marginTop: '1rem' }}>Back</button>
+            </div>
+        );
+    }
+
     if (!myDesk) {
         const CW = 120, CH = 90, DW = 108, DH = 76, PAD = 6;
         return (
             <div style={{ padding: '2rem 0' }}>
                 <div style={{ maxWidth: '640px', margin: '0 auto', background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem' }}>
                     <h2 style={{ fontSize: '20px', fontWeight: '500', margin: '0 0 8px' }}>Join Session</h2>
-                    <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 1.5rem' }}>{session.templateName}</p>
+                    <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 1.5rem' }}>{session.sessionName || session.templateName}</p>
+                    
                     <div style={{ marginBottom: '1rem' }}>
                         <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Your Name</label>
                         <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Enter your name" />
                     </div>
+                    
                     <div style={{ marginBottom: '1.5rem' }}>
                         <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>Select Your Seat</label>
                         {session.layout?.desks ? (
                             <div>
                                 <div style={{ overflowX: 'auto', borderRadius: 'var(--border-radius-md)', border: '0.5px solid var(--color-border-tertiary)' }}>
-                                    <div style={{ position: 'relative', width: ((session.layout.gridCols || 7) * CW) + 'px', height: ((session.layout.gridRows || 5) * CH) + 'px', background: 'var(--color-background-secondary)', backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`, backgroundSize: `${CW}px ${CH}px`, flexShrink: 0 }}>
+                                    <div style={{ position: 'relative', width: ((session.layout.gridCols || 7) * CW) + 'px', height: ((session.layout.gridRows || 5) * CH) + 'px', background: 'var(--color-background-secondary)', backgroundImage: `linear-gradient(to right, var(--color-border-tertiary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border-tertiary) 1px, transparent 1px)`, backgroundSize: `${CW}px ${CH}px` }}>
                                         {session.layout.desks.map(desk => (
                                             <div key={desk.id} style={{ position: 'absolute', left: (desk.x + PAD) + 'px', top: (desk.y + PAD) + 'px', width: DW + 'px' }}>
                                                 <div style={{ background: 'var(--color-background-primary)', border: '1px solid var(--color-border-secondary)', borderRadius: '6px', padding: '4px', height: (DH - PAD) + 'px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
@@ -546,54 +1066,145 @@ function StudentView({ setView }) {
                         ) : (
                             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${session.layout?.cols || 4}, 1fr)`, gap: '8px' }}>
                                 {Array.from({ length: (session.layout?.rows || 1) * (session.layout?.cols || 4) }, (_, i) => {
-                                    const n = i + 1; const taken = !!students[n]; const sel = selectedDesk === n;
-                                    return <button key={n} onClick={() => !taken && setSelectedDesk(n)} disabled={taken} style={{ padding: '1rem', background: taken ? 'var(--color-background-tertiary)' : (sel ? 'var(--color-background-info)' : 'var(--color-background-secondary)'), color: sel ? 'var(--color-text-info)' : 'var(--color-text-primary)', border: sel ? '2px solid var(--color-border-info)' : '0.5px solid var(--color-border-tertiary)', cursor: taken ? 'not-allowed' : 'pointer' }}>{n}</button>;
+                                    const n = i + 1;
+                                    const taken = !!students[n];
+                                    const sel = selectedDesk === n;
+                                    return (
+                                        <button key={n} onClick={() => !taken && setSelectedDesk(n)} disabled={taken}
+                                            style={{ padding: '1rem', background: taken ? 'var(--color-background-tertiary)' : (sel ? 'var(--color-background-info)' : 'var(--color-background-secondary)'), color: sel ? 'var(--color-text-info)' : 'var(--color-text-primary)', border: sel ? '2px solid var(--color-border-info)' : '0.5px solid var(--color-border-tertiary)', cursor: taken ? 'not-allowed' : 'pointer' }}>
+                                            {n}
+                                        </button>
+                                    );
                                 })}
                             </div>
                         )}
                     </div>
+                    
                     <button onClick={joinSession} style={{ width: '100%' }}>Join Session</button>
                 </div>
             </div>
         );
     }
+
     const student = students[myDesk];
     if (!student) return <div style={{ padding: '2rem', textAlign: 'center' }}>Connecting...</div>;
+
     const completedSteps = student.completedSteps || [];
     const enabledSteps = session.enabledSteps || [0];
+    const canSubmit = !session.active;
+
     return (
         <div style={{ padding: '2rem 0' }}>
             <div style={{ maxWidth: '600px', margin: '0 auto' }}>
                 <div style={{ background: 'var(--color-background-primary)', borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1.5rem', marginBottom: '12px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                         <div>
-                            <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>{(() => { const n = Number(myDesk); return !isNaN(n) && n > 0 ? `Desk ${Math.ceil(n / 2)}, Seat ${n}` : `Seat ${myDesk}`; })()}</p>
+                            <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>
+                                {(() => {
+                                    const n = Number(myDesk);
+                                    return !isNaN(n) && n > 0 ? `Desk ${Math.ceil(n / 2)}, Seat ${n}` : `Seat ${myDesk}`;
+                                })()}
+                            </p>
                             <p style={{ fontSize: '18px', fontWeight: '500', margin: '4px 0 0' }}>{student.name}</p>
                         </div>
-                        <button onClick={toggleHand} style={{ background: student.handRaised ? 'var(--color-background-warning)' : 'var(--color-background-secondary)', color: student.handRaised ? 'var(--color-text-warning)' : 'var(--color-text-primary)' }}>{student.handRaised ? '✋ Lower Hand' : 'Raise Hand'}</button>
+                        {session.active && (
+                            <button onClick={toggleHand} style={{ background: student.handRaised ? 'var(--color-background-warning)' : 'var(--color-background-secondary)', color: student.handRaised ? 'var(--color-text-warning)' : 'var(--color-text-primary)' }}>
+                                {student.handRaised ? '✋ Lower Hand' : 'Raise Hand'}
+                            </button>
+                        )}
                     </div>
                     <div style={{ borderTop: '0.5px solid var(--color-border-tertiary)', paddingTop: '1rem' }}>
-                        <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>Progress: {completedSteps.length}/{session.steps.length} steps</p>
+                        <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>
+                            Progress: {completedSteps.length}/{session.steps.length} steps
+                        </p>
+                        {!session.active && (
+                            <p style={{ fontSize: '14px', color: 'var(--color-text-warning)', margin: '8px 0 0' }}>
+                                Session ended. You can still submit screenshots below.
+                            </p>
+                        )}
                     </div>
                 </div>
+
                 <div style={{ display: 'grid', gap: '12px' }}>
                     {session.steps.map((step, i) => {
                         const enabled = enabledSteps.includes(i);
                         const completed = completedSteps.includes(i);
+                        const hasScreenshot = student.screenshots?.[i];
+                        const stepData = typeof step === 'string' ? { title: step } : step;
+
                         return (
-                            <div key={i} style={{ background: completed ? 'var(--color-background-success)' : (enabled ? 'var(--color-background-primary)' : 'var(--color-background-tertiary)'), borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1rem 1.25rem', opacity: enabled ? 1 : 0.5 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div>
+                            <div key={i} style={{ background: completed ? 'var(--color-background-success)' : (enabled ? 'var(--color-background-primary)' : 'var(--color-background-tertiary)'), borderRadius: 'var(--border-radius-lg)', border: '0.5px solid var(--color-border-tertiary)', padding: '1rem 1.25rem', opacity: enabled || !session.active ? 1 : 0.5 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: stepData.description || stepData.imageUrl || (stepData.properties && stepData.properties.length > 0) ? '1rem' : 0 }}>
+                                    <div style={{ flex: 1 }}>
                                         <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0' }}>Step {i + 1}</p>
-                                        <p style={{ fontSize: '16px', fontWeight: '500', margin: '4px 0 0' }}>{step}</p>
+                                        <p style={{ fontSize: '16px', fontWeight: '500', margin: '4px 0 0' }}>{stepData.title}</p>
                                     </div>
-                                    {enabled && <button onClick={() => markDone(i)} disabled={completed} style={{ background: completed ? 'var(--color-background-success)' : 'var(--color-background-primary)', color: completed ? 'var(--color-text-success)' : 'var(--color-text-primary)' }}>{completed ? '✓ Done' : 'Mark Done'}</button>}
+                                    {enabled && session.active && (
+                                        <button onClick={() => markDone(i)} disabled={completed} style={{ background: completed ? 'var(--color-background-success)' : 'var(--color-background-primary)', color: completed ? 'var(--color-text-success)' : 'var(--color-text-primary)' }}>
+                                            {completed ? '✓ Done' : 'Mark Done'}
+                                        </button>
+                                    )}
                                 </div>
+
+                                {stepData.description && (
+                                    <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: '0 0 1rem', whiteSpace: 'pre-line' }}>
+                                        {stepData.description}
+                                    </p>
+                                )}
+
+                                {stepData.imageUrl && (
+                                    <div style={{ marginBottom: '1rem' }}>
+                                        <img src={stepData.imageUrl} alt="Reference" className="preview-image" onClick={() => setImageModal(stepData.imageUrl)} style={{ cursor: 'pointer' }} />
+                                    </div>
+                                )}
+
+                                {stepData.properties && stepData.properties.length > 0 && (
+                                    <div style={{ background: 'var(--color-background-secondary)', borderRadius: 'var(--border-radius-md)', padding: '12px', marginBottom: '1rem' }}>
+                                        <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: '0 0 8px', fontWeight: '500' }}>
+                                            Properties to fill:
+                                        </p>
+                                        {stepData.properties.map((prop, pi) => (
+                                            <div key={pi} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', margin: '4px 0' }}>
+                                                <span style={{ color: 'var(--color-text-secondary)' }}>{prop.key}:</span>
+                                                <span style={{ fontWeight: '500' }}>{prop.value}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {canSubmit && (
+                                    <div style={{ borderTop: '0.5px solid var(--color-border-tertiary)', paddingTop: '1rem', marginTop: stepData.description || stepData.imageUrl || (stepData.properties && stepData.properties.length > 0) ? 0 : '1rem' }}>
+                                        <label style={{ display: 'block', fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '6px' }}>
+                                            Submit your work
+                                        </label>
+                                        {hasScreenshot ? (
+                                            <div>
+                                                <img src={hasScreenshot} alt="Your submission" className="thumbnail" onClick={() => setImageModal(hasScreenshot)} style={{ marginBottom: '8px' }} />
+                                                <input type="file" accept="image/*" onChange={e => uploadScreenshot(i, e.target.files[0])} disabled={uploadingStep === i} />
+                                                {uploadingStep === i && <p style={{ fontSize: '12px', color: 'var(--color-text-info)', margin: '4px 0 0' }}>Uploading...</p>}
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <input type="file" accept="image/*" onChange={e => uploadScreenshot(i, e.target.files[0])} disabled={uploadingStep === i} />
+                                                {uploadingStep === i && <p style={{ fontSize: '12px', color: 'var(--color-text-info)', margin: '4px 0 0' }}>Uploading...</p>}
+                                            </>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
                 </div>
             </div>
+
+            {imageModal && (
+                <div className="modal-overlay" onClick={() => setImageModal(null)}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '90vw' }}>
+                        <img src={imageModal} alt="Full size" style={{ width: '100%', borderRadius: 'var(--border-radius-md)' }} />
+                        <button onClick={() => setImageModal(null)} style={{ marginTop: '1rem', width: '100%' }}>Close</button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
